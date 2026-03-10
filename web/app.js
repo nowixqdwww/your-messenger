@@ -26,7 +26,7 @@ let unreadCounts = {}
 
 // ============= ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =============
 
-// Функция очистки номера от пробелов - ОБЪЯВЛЯЕМ САМОЙ ПЕРВОЙ
+// Функция очистки номера от пробелов
 function cleanPhone(phone) {
     if (!phone) return ''
     return phone.toString().replace(/\s+/g, '').trim()
@@ -41,17 +41,6 @@ function showToast(message, duration = 3000) {
     setTimeout(() => {
         toast.classList.remove('show')
     }, duration)
-}
-
-// Универсальная функция для проверки наличия класса у элемента или его родителей
-function hasClass(element, className) {
-    while (element) {
-        if (element.classList && element.classList.contains(className)) {
-            return true;
-        }
-        element = element.parentElement;
-    }
-    return false;
 }
 
 // Форматирование номера телефона
@@ -80,6 +69,19 @@ function escapeHtml(text) {
     const div = document.createElement('div')
     div.textContent = text
     return div.innerHTML
+}
+
+// Универсальная функция для проверки наличия класса у элемента или его родителей
+function hasClass(element, className) {
+    if (!element) return false;
+    let current = element;
+    while (current) {
+        if (current.classList && current.classList.contains(className)) {
+            return true;
+        }
+        current = current.parentElement;
+    }
+    return false;
 }
 
 // Переключение сайдбара на мобильных
@@ -154,50 +156,6 @@ function showContextMenu(event, type, data) {
     }, 0)
 }
 
-// Обработчик долгого нажатия
-function handleLongPress(event, type, data) {
-    event.preventDefault()
-    event.stopPropagation()
-    
-    if (longPressTimer) {
-        clearTimeout(longPressTimer)
-    }
-    
-    longPressTarget = { type, data, event }
-    
-    longPressTimer = setTimeout(() => {
-        if (longPressTarget) {
-            if (window.navigator.vibrate) {
-                window.navigator.vibrate(50)
-            }
-            showContextMenu(
-                longPressTarget.event,
-                longPressTarget.type,
-                longPressTarget.data
-            )
-            longPressTarget = null
-        }
-    }, 500)
-}
-
-// Обработчик окончания касания
-function handleTouchEnd() {
-    if (longPressTimer) {
-        clearTimeout(longPressTimer)
-        longPressTimer = null
-    }
-    longPressTarget = null
-}
-
-// Обработчик движения пальца
-function handleTouchMove() {
-    if (longPressTimer) {
-        clearTimeout(longPressTimer)
-        longPressTimer = null
-    }
-    longPressTarget = null
-}
-
 // Скрыть все контекстные меню
 function hideContextMenus() {
     document.getElementById('messageContextMenu').style.display = 'none'
@@ -261,7 +219,6 @@ function createChatElement(chat) {
     let div = document.createElement("div")
     div.className = "chatItem"
     
-    // Очищаем телефон перед использованием в ID
     const cleanPhoneValue = cleanPhone(chat.phone)
     div.id = `chat-${cleanPhoneValue}`
     
@@ -291,22 +248,57 @@ function createChatElement(chat) {
         <div class="chat-status ${isOnline ? '' : 'offline'}"></div>
     `
     
-    // Обработчики для ПК
+    // Флаг для отслеживания долгого нажатия
+    let isLongPress = false
+    
+    // Обработчики для мыши (ПК)
+    div.addEventListener('mousedown', () => {
+        isLongPress = false
+    })
+    
+    div.addEventListener('mouseup', () => {
+        if (!isLongPress) {
+            openChat(chat.phone, displayName)
+        }
+    })
+    
+    // Обработчики для касания (мобильные)
+    div.addEventListener('touchstart', (e) => {
+        isLongPress = false
+        // Запускаем таймер долгого нажатия
+        longPressTimer = setTimeout(() => {
+            isLongPress = true
+            if (window.navigator.vibrate) {
+                window.navigator.vibrate(50)
+            }
+            showContextMenu(e, 'chat', { phone: chat.phone, element: div })
+        }, 500)
+    })
+    
+    div.addEventListener('touchend', (e) => {
+        clearTimeout(longPressTimer)
+        if (!isLongPress) {
+            // Обычное касание - открываем чат
+            e.preventDefault()
+            openChat(chat.phone, displayName)
+        }
+    })
+    
+    div.addEventListener('touchmove', () => {
+        clearTimeout(longPressTimer)
+        isLongPress = true
+    })
+    
+    div.addEventListener('touchcancel', () => {
+        clearTimeout(longPressTimer)
+    })
+    
+    // ПКМ для контекстного меню
     div.addEventListener('contextmenu', (e) => {
         e.preventDefault()
         showContextMenu(e, 'chat', { phone: chat.phone, element: div })
     })
     
-    // Обработчики для мобильных
-    div.addEventListener('touchstart', (e) => {
-        handleLongPress(e, 'chat', { phone: chat.phone, element: div })
-    })
-    
-    div.addEventListener('touchend', handleTouchEnd)
-    div.addEventListener('touchmove', handleTouchMove)
-    div.addEventListener('touchcancel', handleTouchEnd)
-    
-    div.onclick = () => openChat(chat.phone, displayName)
     return div
 }
 
@@ -887,20 +879,50 @@ function addMessage(user, text, messageId = null) {
     `
     
     if (user === currentUser && messageId) {
-        // Обработчики для ПК
+        // Флаг для отслеживания долгого нажатия
+        let isLongPress = false
+        
+        // Обработчики для мыши (ПК)
+        div.addEventListener('mousedown', () => {
+            isLongPress = false
+        })
+        
+        div.addEventListener('mouseup', () => {
+            if (!isLongPress) {
+                // Обычный клик - ничего не делаем
+            }
+        })
+        
+        // Обработчики для касания (мобильные)
+        div.addEventListener('touchstart', (e) => {
+            isLongPress = false
+            longPressTimer = setTimeout(() => {
+                isLongPress = true
+                if (window.navigator.vibrate) {
+                    window.navigator.vibrate(50)
+                }
+                showContextMenu(e, 'message', { messageId: messageId, element: div })
+            }, 500)
+        })
+        
+        div.addEventListener('touchend', (e) => {
+            clearTimeout(longPressTimer)
+        })
+        
+        div.addEventListener('touchmove', () => {
+            clearTimeout(longPressTimer)
+            isLongPress = true
+        })
+        
+        div.addEventListener('touchcancel', () => {
+            clearTimeout(longPressTimer)
+        })
+        
+        // ПКМ для контекстного меню
         div.addEventListener('contextmenu', (e) => {
             e.preventDefault()
             showContextMenu(e, 'message', { messageId: messageId, element: div })
         })
-        
-        // Обработчики для мобильных
-        div.addEventListener('touchstart', (e) => {
-            handleLongPress(e, 'message', { messageId: messageId, element: div })
-        })
-        
-        div.addEventListener('touchend', handleTouchEnd)
-        div.addEventListener('touchmove', handleTouchMove)
-        div.addEventListener('touchcancel', handleTouchEnd)
     }
     
     messagesDiv.appendChild(div)
@@ -1340,4 +1362,3 @@ window.addEventListener('beforeunload', () => {
 
 // Периодическое обновление онлайн статусов
 setInterval(updateOnlineStatus, 5000)
-
