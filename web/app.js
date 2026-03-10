@@ -29,19 +29,16 @@ let unreadCounts = {}
 
 // ============= ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =============
 
-// Функция очистки номера от пробелов
 function cleanPhone(phone) {
     if (!phone) return ''
     return phone.toString().replace(/\s+/g, '').trim()
 }
 
-// Проверка, существует ли чат в списке
 function chatExists(phone) {
     const cleanPhoneValue = cleanPhone(phone)
     return document.getElementById(`chat-${cleanPhoneValue}`) !== null
 }
 
-// Показ уведомлений
 function showToast(message, duration = 3000) {
     const toast = document.getElementById('toast')
     toast.textContent = message
@@ -52,7 +49,6 @@ function showToast(message, duration = 3000) {
     }, duration)
 }
 
-// Форматирование номера телефона
 function formatPhone(phone) {
     if (!phone) return 'Нет номера'
     if (phone.length === 11) {
@@ -61,7 +57,6 @@ function formatPhone(phone) {
     return phone
 }
 
-// Получение первой буквы для аватара
 function getAvatarLetter(name) {
     if (!name) return '👤'
     if (name.startsWith('@') && name.length > 1) {
@@ -73,14 +68,12 @@ function getAvatarLetter(name) {
     return '👤'
 }
 
-// Экранирование HTML
 function escapeHtml(text) {
     const div = document.createElement('div')
     div.textContent = text
     return div.innerHTML
 }
 
-// Универсальная функция для проверки наличия класса у элемента или его родителей
 function hasClass(element, className) {
     if (!element) return false;
     let current = element;
@@ -93,13 +86,11 @@ function hasClass(element, className) {
     return false;
 }
 
-// Переключение сайдбара на мобильных
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar')
     sidebar.classList.toggle('open')
 }
 
-// Закрыть чат на мобильных
 function closeChat(event) {
     if (event) event.stopPropagation()
     currentChat = null
@@ -110,7 +101,6 @@ function closeChat(event) {
 
 // ============= ФУНКЦИИ ДЛЯ СТАТУСОВ =============
 
-// Обновление статусов онлайн
 function updateOnlineStatus() {
     document.querySelectorAll('.chatItem').forEach(item => {
         const phone = item.id.replace('chat-', '')
@@ -128,7 +118,6 @@ function updateOnlineStatus() {
     }
 }
 
-// Трансляция статуса онлайн всем контактам
 function broadcastOnlineStatus(isOnline) {
     if (!ws || ws.readyState !== WebSocket.OPEN) return
     
@@ -518,6 +507,9 @@ async function showUserProfile(phone, isMyProfile = false) {
         if (!res.ok) throw new Error('Failed to load user')
         const user = await res.json()
         
+        const settingsRes = await fetch(`/privacy-settings/${phone}`)
+        const settings = await settingsRes.json()
+        
         const modal = document.getElementById('profileModal')
         const profileView = document.getElementById('profileView')
         const profileEdit = document.getElementById('profileEdit')
@@ -526,7 +518,7 @@ async function showUserProfile(phone, isMyProfile = false) {
         const displayName = user.name || user.username || user.phone
         
         const modalAvatar = document.getElementById('modalAvatarText')
-        if (user.avatar) {
+        if (user.avatar && (isMyProfile || settings.avatar_privacy !== 'nobody')) {
             modalAvatar.innerHTML = `<img src="${user.avatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;" onerror="this.onerror=null; this.parentElement.innerText=getAvatarLetter('${displayName}')">`
         } else {
             modalAvatar.innerText = getAvatarLetter(displayName)
@@ -535,13 +527,22 @@ async function showUserProfile(phone, isMyProfile = false) {
         document.getElementById('modalName').innerText = user.name || 'Не указано'
         document.getElementById('modalUsername').innerText = user.username || 'Не установлен'
         document.getElementById('modalBio').innerText = user.bio || 'Не указано'
-        document.getElementById('modalPhone').innerText = formatPhone(user.phone)
+        
+        if (isMyProfile || settings.phone_privacy === 'everyone') {
+            document.getElementById('modalPhone').innerText = formatPhone(user.phone)
+        } else {
+            document.getElementById('modalPhone').innerText = 'Скрыто'
+        }
         
         const isOnline = window.clients && window.clients[phone] === true
+        let statusText = ''
+        if (settings.online_privacy === 'nobody' && !isMyProfile) {
+            statusText = 'Скрыто'
+        } else {
+            statusText = isOnline ? 'онлайн' : 'оффлайн'
+        }
         
-        document.getElementById('modalStatus').innerHTML = isOnline ? 
-            '<span style="color: #4ade80;">● Онлайн</span>' : 
-            '<span style="color: #f87171;">● Оффлайн</span>'
+        document.getElementById('modalStatus').innerHTML = statusText
         
         modalActions.innerHTML = ''
         
@@ -1254,7 +1255,6 @@ function handleReconnect() {
 
 // ============= ПОИСК С АВТОДОПОЛНЕНИЕМ =============
 
-// Поиск пользователей по части имени
 async function searchUsers(query) {
     if (query.length < 2) {
         hideSearchResults()
@@ -1273,7 +1273,6 @@ async function searchUsers(query) {
     }
 }
 
-// Отображение результатов поиска
 function displaySearchResults(users, query) {
     const resultsDiv = document.getElementById('searchResults')
     const searchInput = document.getElementById('searchUser')
@@ -1296,12 +1295,10 @@ function displaySearchResults(users, query) {
     resultsDiv.style.display = 'block'
 }
 
-// Создание элемента результата поиска
 function createSearchResultItem(user, query) {
     const div = document.createElement('div')
     div.className = 'search-result-item'
     
-    // Подсвечиваем совпадения
     const highlightedUsername = highlightMatch(user.username || '', query)
     const highlightedName = highlightMatch(user.name || '', query)
     
@@ -1330,7 +1327,6 @@ function createSearchResultItem(user, query) {
     return div
 }
 
-// Подсветка совпадений
 function highlightMatch(text, query) {
     if (!text || !query) return text
     
@@ -1338,7 +1334,6 @@ function highlightMatch(text, query) {
     return text.replace(regex, '<span style="background-color: #ffeb3b; color: #333;">$1</span>')
 }
 
-// Обработчик ввода в поле поиска
 document.getElementById('searchUser').addEventListener('input', (e) => {
     const query = e.target.value.trim()
     
@@ -1360,7 +1355,6 @@ document.getElementById('searchUser').addEventListener('input', (e) => {
     }, 300)
 })
 
-// Обработчик клика вне области поиска
 document.addEventListener('click', (e) => {
     const searchInput = document.getElementById('searchUser')
     const searchResults = document.getElementById('searchResults')
@@ -1372,7 +1366,6 @@ document.addEventListener('click', (e) => {
     }
 })
 
-// Скрыть результаты поиска
 function hideSearchResults() {
     const resultsDiv = document.getElementById('searchResults')
     if (resultsDiv) {
@@ -1380,7 +1373,6 @@ function hideSearchResults() {
     }
 }
 
-// Обработчик клавиш в поиске
 document.getElementById('searchUser').addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
         hideSearchResults()
@@ -1393,7 +1385,6 @@ document.getElementById('searchUser').addEventListener('keydown', (e) => {
     }
 })
 
-// Поиск точного пользователя
 async function searchExactUser(username) {
     if (!username) {
         showToast("Введите username")
@@ -1422,6 +1413,148 @@ async function searchExactUser(username) {
     } catch (error) {
         console.error("Search error:", error)
         showToast("Ошибка при поиске")
+    }
+}
+
+// ============= НАСТРОЙКИ =============
+
+function openSettings() {
+    const modal = document.getElementById('settingsModal')
+    loadPrivacySettings()
+    modal.classList.add('show')
+}
+
+function closeSettings() {
+    const modal = document.getElementById('settingsModal')
+    modal.classList.remove('show')
+}
+
+async function loadPrivacySettings() {
+    if (!currentUser) return
+    
+    try {
+        const res = await fetch(`/privacy-settings/${currentUser}`)
+        if (!res.ok) throw new Error('Failed to load settings')
+        
+        const settings = await res.json()
+        
+        document.getElementById('phonePrivacy').value = settings.phone_privacy || 'everyone'
+        document.getElementById('onlinePrivacy').value = settings.online_privacy || 'everyone'
+        document.getElementById('avatarPrivacy').value = settings.avatar_privacy || 'everyone'
+        
+    } catch (error) {
+        console.error("Error loading privacy settings:", error)
+        showToast("Ошибка загрузки настроек")
+    }
+}
+
+async function savePhonePrivacy() {
+    await saveAllPrivacySettings()
+}
+
+async function saveOnlinePrivacy() {
+    await saveAllPrivacySettings()
+}
+
+async function saveAvatarPrivacy() {
+    await saveAllPrivacySettings()
+}
+
+async function saveAllPrivacySettings() {
+    if (!currentUser) return
+    
+    const settings = {
+        phone_privacy: document.getElementById('phonePrivacy').value,
+        online_privacy: document.getElementById('onlinePrivacy').value,
+        avatar_privacy: document.getElementById('avatarPrivacy').value
+    }
+    
+    try {
+        const res = await fetch(`/privacy-settings/${currentUser}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settings)
+        })
+        
+        if (!res.ok) throw new Error('Failed to save settings')
+        
+        showToast('Настройки сохранены')
+        
+    } catch (error) {
+        console.error("Error saving privacy settings:", error)
+        showToast("Ошибка сохранения настроек")
+    }
+}
+
+function openBlockedUsers() {
+    showToast("Функция в разработке")
+    closeSettings()
+}
+
+function openSessions() {
+    showToast("Функция в разработке")
+    closeSettings()
+}
+
+async function clearAllChats() {
+    if (!confirm('Вы уверены? Все чаты и сообщения будут удалены. Это действие нельзя отменить.')) {
+        return
+    }
+    
+    try {
+        const res = await fetch('/clear-all-chats', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user: currentUser })
+        })
+        
+        if (res.ok) {
+            document.getElementById("chatList").innerHTML = ""
+            document.getElementById("chatsCount").textContent = "0"
+            
+            if (currentChat) {
+                document.getElementById("messages").innerHTML = ""
+                currentChat = null
+                document.getElementById('emptyChat').style.display = 'flex'
+                document.getElementById('chatBlock').style.display = 'none'
+            }
+            
+            chatsCache = {}
+            unreadCounts = {}
+            
+            showToast('Все чаты очищены')
+            closeSettings()
+        }
+        
+    } catch (error) {
+        console.error("Error clearing all chats:", error)
+        showToast("Ошибка при очистке")
+    }
+}
+
+async function exportData() {
+    showToast("Подготовка данных...")
+    
+    try {
+        const res = await fetch(`/export-data/${currentUser}`)
+        if (!res.ok) throw new Error('Export failed')
+        
+        const data = await res.json()
+        
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `nonblock-data-${new Date().toISOString().slice(0,10)}.json`
+        a.click()
+        URL.revokeObjectURL(url)
+        
+        showToast('Данные экспортированы')
+        closeSettings()
+        
+    } catch (error) {
+        console.error("Error exporting data:", error)
+        showToast("Ошибка при экспорте")
     }
 }
 
