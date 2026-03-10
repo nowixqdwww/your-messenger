@@ -366,14 +366,16 @@ async def websocket_endpoint(ws: WebSocket, user: str):
                     text = data.get("text")
                     if not to or text is None:
                         continue
-
+                
+                    # Сохраняем сообщение
                     conn = await get_db()
                     message_id = await conn.fetchval('''
                         INSERT INTO messages (sender, receiver, text) 
                         VALUES ($1, $2, $3) RETURNING id
                     ''', user, to, text)
                     await conn.close()
-
+                
+                    # Отправляем получателю, если онлайн
                     if to in clients:
                         try:
                             await clients[to].send_json({
@@ -384,6 +386,14 @@ async def websocket_endpoint(ws: WebSocket, user: str):
                             })
                         except:
                             clients.pop(to, None)
+                    
+                    # ВАЖНО: Отправляем confirmation отправителю, чтобы он сразу создал чат
+                    await ws.send_json({
+                        "action": "message_sent",
+                        "to": to,
+                        "text": text,
+                        "id": message_id
+                    })
 
                 elif action == "delete":
                     message_id = data.get("message_id")
@@ -457,3 +467,4 @@ if __name__ == "__main__":
         port=port,
         reload=False
     )
+
