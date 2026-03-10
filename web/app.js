@@ -56,6 +56,19 @@ function getAvatarLetter(name) {
     return '👤'
 }
 
+// Функция для проверки аватаров (для отладки)
+async function checkAvatar(url) {
+    try {
+        const res = await fetch(url, { method: 'HEAD' })
+        console.log(`Avatar ${url}: ${res.ok ? 'OK' : 'NOT FOUND'}`)
+        return res.ok
+    } catch (error) {
+        console.error(`Error checking avatar ${url}:`, error)
+        return false
+    }
+}
+
+
 // Экранирование HTML
 function escapeHtml(text) {
     const div = document.createElement('div')
@@ -112,6 +125,14 @@ async function loadUserProfile() {
         if (!res.ok) throw new Error('Failed to load profile')
         const data = await res.json()
         
+        console.log('Profile data:', data) // Для отладки
+        
+        if (data.avatar) {
+            // Проверяем существование аватара
+            const exists = await checkAvatar(data.avatar)
+            console.log(`Avatar exists: ${exists}`)
+        }
+        
         currentUserProfile = data
         
         const displayName = data.name || data.username || data.phone
@@ -119,7 +140,7 @@ async function loadUserProfile() {
         
         const myAvatar = document.getElementById("myAvatarText")
         if (data.avatar) {
-            myAvatar.innerHTML = `<img src="${data.avatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`
+            myAvatar.innerHTML = `<img src="${data.avatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;" onerror="this.onerror=null; this.parentElement.innerText=getAvatarLetter('${displayName}')">`
         } else {
             myAvatar.innerText = getAvatarLetter(displayName)
         }
@@ -128,7 +149,6 @@ async function loadUserProfile() {
         console.error("Error loading profile:", error)
     }
 }
-
 // Открыть свой профиль
 function openMyProfile() {
     showUserProfile(currentUser, true)
@@ -1251,3 +1271,4 @@ window.addEventListener('beforeunload', () => {
 
 // Периодическое обновление онлайн статусов
 setInterval(updateOnlineStatus, 5000)
+
