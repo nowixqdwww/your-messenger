@@ -181,6 +181,16 @@ async def upload_avatar(phone: str, file: UploadFile = File(...)):
         if not file.content_type.startswith('image/'):
             return JSONResponse(status_code=400, content={"error": "File must be an image"})
         
+        # Читаем файл для проверки размера
+        content = await file.read()
+        file_size = len(content)
+        
+        if file_size > 5 * 1024 * 1024:  # 5MB
+            return JSONResponse(status_code=400, content={"error": "File too large (max 5MB)"})
+        
+        # Возвращаем указатель чтения в начало
+        await file.seek(0)
+        
         file_extension = os.path.splitext(file.filename)[1]
         filename = create_safe_filename(phone, file_extension)
         file_path = os.path.join(AVATAR_DIR, filename)
@@ -196,8 +206,9 @@ async def upload_avatar(phone: str, file: UploadFile = File(...)):
                 os.remove(old_path)
                 logger.info(f"Removed old avatar: {old_path}")
         
+        # Сохраняем файл
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            buffer.write(content)
         
         logger.info(f"Saved new avatar: {file_path}")
         
@@ -278,6 +289,9 @@ async def delete_chat(data: dict):
         user = data.get("user")
         chat_with = data.get("chat_with")
         
+        if not user or not chat_with:
+            return JSONResponse(status_code=400, content={"error": "Missing parameters"})
+        
         conn = await get_db()
         
         await conn.execute('''
@@ -301,6 +315,9 @@ async def clear_chat(data: dict):
         user = data.get("user")
         chat_with = data.get("chat_with")
         
+        if not user or not chat_with:
+            return JSONResponse(status_code=400, content={"error": "Missing parameters"})
+        
         conn = await get_db()
         
         await conn.execute('''
@@ -323,6 +340,9 @@ async def clear_chat(data: dict):
 async def clear_all_chats(data: dict):
     try:
         user = data.get("user")
+        
+        if not user:
+            return JSONResponse(status_code=400, content={"error": "Missing parameters"})
         
         conn = await get_db()
         
@@ -395,6 +415,15 @@ async def get_privacy_settings(phone: str):
                 "avatar_privacy": settings['avatar_privacy']
             }
         else:
+            # Создаем настройки по умолчанию
+            conn = await get_db()
+            await conn.execute('''
+                INSERT INTO privacy_settings (phone, phone_privacy, online_privacy, avatar_privacy)
+                VALUES ($1, 'everyone', 'everyone', 'everyone')
+                ON CONFLICT (phone) DO NOTHING
+            ''', phone)
+            await conn.close()
+            
             return {
                 "phone_privacy": "everyone",
                 "online_privacy": "everyone",
