@@ -43,6 +43,17 @@ function showToast(message, duration = 3000) {
     }, duration)
 }
 
+// Универсальная функция для проверки наличия класса у элемента или его родителей
+function hasClass(element, className) {
+    while (element) {
+        if (element.classList && element.classList.contains(className)) {
+            return true;
+        }
+        element = element.parentElement;
+    }
+    return false;
+}
+
 // Форматирование номера телефона
 function formatPhone(phone) {
     if (!phone) return 'Нет номера'
@@ -203,17 +214,17 @@ document.addEventListener('touchstart', hideContextMenus)
 
 // Предотвращаем стандартное контекстное меню
 document.addEventListener('contextmenu', (e) => {
-    if (e.target.closest('.message') || e.target.closest('.chatItem')) {
-        e.preventDefault()
+    if (hasClass(e.target, 'message') || hasClass(e.target, 'chatItem')) {
+        e.preventDefault();
     }
-})
+});
 
 // Предотвращаем выделение на мобильных
 document.addEventListener('selectstart', (e) => {
-    if (e.target.closest('.message') || e.target.closest('.chatItem')) {
-        e.preventDefault()
+    if (hasClass(e.target, 'message') || hasClass(e.target, 'chatItem')) {
+        e.preventDefault();
     }
-})
+});
 
 // ============= ФУНКЦИИ ДЛЯ РАБОТЫ С ЧАТАМИ =============
 
@@ -1329,3 +1340,4 @@ window.addEventListener('beforeunload', () => {
 
 // Периодическое обновление онлайн статусов
 setInterval(updateOnlineStatus, 5000)
+
