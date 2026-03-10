@@ -99,6 +99,44 @@ function closeChat(event) {
     document.getElementById('sidebar').classList.add('open')
 }
 
+// ============= ФУНКЦИИ ДЛЯ СТАТУСОВ =============
+
+// Обновление статусов онлайн
+function updateOnlineStatus() {
+    // Обновляем статусы в списке чатов
+    document.querySelectorAll('.chatItem').forEach(item => {
+        const phone = item.id.replace('chat-', '')
+        const statusDot = item.querySelector('.chat-status')
+        if (statusDot) {
+            const isOnline = window.clients && window.clients[phone] === true
+            statusDot.className = `chat-status ${isOnline ? '' : 'offline'}`
+        }
+    })
+    
+    // Обновляем статус в текущем чате
+    if (currentChat) {
+        const isOnline = window.clients && window.clients[currentChat] === true
+        document.getElementById('chatUserStatus').textContent = isOnline ? 'online' : 'offline'
+        document.getElementById('chatUserStatus').className = `chat-user-status ${isOnline ? '' : 'offline'}`
+    }
+}
+
+// Трансляция статуса онлайн всем контактам
+function broadcastOnlineStatus(isOnline) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    
+    // Получаем список всех чатов и отправляем им статус
+    const chatElements = document.querySelectorAll('.chatItem')
+    chatElements.forEach(item => {
+        const contactPhone = item.id.replace('chat-', '')
+        ws.send(JSON.stringify({
+            action: 'status',
+            to: contactPhone,
+            online: isOnline
+        }))
+    })
+}
+
 // ============= ФУНКЦИИ ДЛЯ КОНТЕКСТНОГО МЕНЮ =============
 
 // Функция для показа контекстного меню
@@ -233,7 +271,8 @@ function createChatElement(chat) {
         avatarHtml = escapeHtml(getAvatarLetter(displayName))
     }
     
-    const isOnline = window.clients && chat.phone in window.clients
+    // Проверяем онлайн статус
+    const isOnline = window.clients && window.clients[chat.phone] === true
     
     const unreadBadge = unreadCount > 0 ? 
         `<span class="unread-badge">${unreadCount > 99 ? '99+' : unreadCount}</span>` : ''
@@ -372,7 +411,7 @@ async function updateSingleChat(phone, moveToTop = false) {
                 name: userData.name,
                 displayName: userData.name || userData.username || phone,
                 avatar: userData.avatar,
-                online: phone in window.clients,
+                online: window.clients && window.clients[phone] === true,
                 last: ''
             }
             
@@ -418,7 +457,8 @@ async function updateSingleChat(phone, moveToTop = false) {
                 avatarElement.innerText = getAvatarLetter(displayName)
             }
             
-            const isOnline = window.clients && phone in window.clients
+            // Обновляем статус
+            const isOnline = window.clients && window.clients[phone] === true
             if (statusDot) {
                 statusDot.className = `chat-status ${isOnline ? '' : 'offline'}`
             }
@@ -552,10 +592,8 @@ async function showUserProfile(phone, isMyProfile = false) {
         document.getElementById('modalBio').innerText = user.bio || 'Не указано'
         document.getElementById('modalPhone').innerText = formatPhone(user.phone)
         
-        let isOnline = false
-        if (window.clients && typeof window.clients === 'object') {
-            isOnline = phone in window.clients
-        }
+        // Проверяем онлайн статус
+        const isOnline = window.clients && window.clients[phone] === true
         
         document.getElementById('modalStatus').innerHTML = isOnline ? 
             '<span style="color: #4ade80;">● Онлайн</span>' : 
@@ -783,8 +821,10 @@ function openChat(phone, displayName) {
                 chatAvatar.innerText = getAvatarLetter(name)
             }
             
-            const isOnline = window.clients && phone in window.clients
+            // Проверяем онлайн статус
+            const isOnline = window.clients && window.clients[phone] === true
             document.getElementById('chatUserStatus').textContent = isOnline ? 'online' : 'offline'
+            document.getElementById('chatUserStatus').className = `chat-user-status ${isOnline ? '' : 'offline'}`
         })
         .catch(() => {
             document.getElementById("chatUserName").innerText = displayName || phone
@@ -1080,23 +1120,6 @@ async function clearChat() {
 
 // ============= WEBSOCKET ФУНКЦИИ =============
 
-// Обновление онлайн статусов
-function updateOnlineStatus() {
-    document.querySelectorAll('.chatItem').forEach(item => {
-        const phone = item.id.replace('chat-', '')
-        const statusDot = item.querySelector('.chat-status')
-        if (statusDot) {
-            const isOnline = window.clients && phone in window.clients
-            statusDot.className = `chat-status ${isOnline ? '' : 'offline'}`
-        }
-    })
-    
-    if (currentChat) {
-        const isOnline = window.clients && currentChat in window.clients
-        document.getElementById('chatUserStatus').textContent = isOnline ? 'online' : 'offline'
-    }
-}
-
 // Подключение WebSocket
 function connect() {
     if (pingInterval) clearInterval(pingInterval)
@@ -1115,7 +1138,10 @@ function connect() {
             reconnectAttempts = 0
             showToast('Подключено к серверу')
             
-            updateOnlineStatus()
+            // Обновляем свой статус в списке контактов
+            setTimeout(() => {
+                broadcastOnlineStatus(true)
+            }, 500)
             
             pingInterval = setInterval(() => {
                 if (ws.readyState === WebSocket.OPEN) {
@@ -1129,6 +1155,41 @@ function connect() {
                 const data = JSON.parse(event.data)
 
                 if (data.action === 'pong') return
+
+                if (data.action === "status") {
+                    // Обновляем статус контакта
+                    if (data.from) {
+                        // Обновляем в кэше
+                        if (!window.clients) window.clients = {}
+                        window.clients[data.from] = data.online
+                        
+                        // Обновляем отображение
+                        const contactId = `chat-${cleanPhone(data.from)}`
+                        const chatElement = document.getElementById(contactId)
+                        if (chatElement) {
+                            const statusDot = chatElement.querySelector('.chat-status')
+                            if (statusDot) {
+                                statusDot.className = `chat-status ${data.online ? '' : 'offline'}`
+                            }
+                        }
+                        
+                        // Если это текущий чат - обновляем статус в шапке
+                        if (currentChat === data.from) {
+                            document.getElementById('chatUserStatus').textContent = data.online ? 'online' : 'offline'
+                            document.getElementById('chatUserStatus').className = `chat-user-status ${data.online ? '' : 'offline'}`
+                        }
+                        
+                        // Если это свой профиль в модалке
+                        if (data.from === currentUser) {
+                            const modalStatus = document.getElementById('modalStatus')
+                            if (modalStatus) {
+                                modalStatus.innerHTML = data.online ? 
+                                    '<span style="color: #4ade80;">● Онлайн</span>' : 
+                                    '<span style="color: #f87171;">● Оффлайн</span>'
+                            }
+                        }
+                    }
+                }
 
                 if (data.action === "message") {
                     addMessage(data.from, data.text, data.id)
@@ -1195,11 +1256,13 @@ function connect() {
                 if (data.action === "typing") {
                     if (currentChat === data.from) {
                         document.getElementById('chatUserStatus').textContent = 'печатает...'
+                        document.getElementById('chatUserStatus').className = 'chat-user-status'
                         clearTimeout(window.typingStatusTimeout)
                         window.typingStatusTimeout = setTimeout(() => {
                             if (currentChat === data.from) {
-                                let isOnline = window.clients && data.from in window.clients
+                                const isOnline = window.clients && window.clients[data.from] === true
                                 document.getElementById('chatUserStatus').textContent = isOnline ? 'online' : 'offline'
+                                document.getElementById('chatUserStatus').className = `chat-user-status ${isOnline ? '' : 'offline'}`
                             }
                         }, 3000)
                     }
@@ -1211,8 +1274,22 @@ function connect() {
 
         ws.onclose = (event) => {
             console.log('WebSocket disconnected:', event.code, event.reason)
+            
+            // Отправляем сигнал, что пользователь оффлайн
+            broadcastOnlineStatus(false)
+            
+            // Очищаем все статусы
+            if (window.clients) {
+                Object.keys(window.clients).forEach(key => {
+                    window.clients[key] = false
+                })
+            }
+            
             isConnected = false
             if (pingInterval) clearInterval(pingInterval)
+            
+            // Обновляем UI
+            updateOnlineStatus()
             
             if (event.code !== 1000) {
                 handleReconnect()
@@ -1339,6 +1416,13 @@ window.addEventListener('online', () => {
 
 window.addEventListener('offline', () => {
     showToast('Потеряно соединение с интернетом')
+    // Отмечаем всех как оффлайн
+    if (window.clients) {
+        Object.keys(window.clients).forEach(key => {
+            window.clients[key] = false
+        })
+    }
+    updateOnlineStatus()
 })
 
 // Адаптация при изменении размера окна
@@ -1360,5 +1444,5 @@ window.addEventListener('beforeunload', () => {
     if (ws) ws.close(1000, 'Page closed')
 })
 
-// Периодическое обновление онлайн статусов
+// Периодическое обновление статусов
 setInterval(updateOnlineStatus, 5000)
