@@ -6,7 +6,6 @@ import sqlite3
 import os
 import logging
 import shutil
-import base64
 from pathlib import Path
 from pydantic import BaseModel
 import uvicorn
@@ -59,6 +58,26 @@ def upgrade_db():
             except:
                 pass
         
+        # Если нет колонки bio - добавляем (раздел "О себе")
+        if 'bio' not in columns:
+            try:
+                cursor.execute("ALTER TABLE users ADD COLUMN bio TEXT")
+                logger.info("Added 'bio' column to users table")
+            except:
+                pass
+        
+        # Проверяем структуру таблицы messages
+        cursor.execute("PRAGMA table_info(messages)")
+        msg_columns = [column[1] for column in cursor.fetchall()]
+        
+        # Если нет колонки is_deleted - добавляем
+        if 'is_deleted' not in msg_columns:
+            try:
+                cursor.execute("ALTER TABLE messages ADD COLUMN is_deleted INTEGER DEFAULT 0")
+                logger.info("Added 'is_deleted' column to messages table")
+            except:
+                pass
+        
         conn.commit()
         conn.close()
         logger.info("Database upgrade completed")
@@ -76,6 +95,7 @@ def init_db():
         phone TEXT PRIMARY KEY,
         username TEXT UNIQUE,
         name TEXT,
+        bio TEXT,
         avatar TEXT
         )
         """)
@@ -86,7 +106,8 @@ def init_db():
         sender TEXT,
         receiver TEXT,
         text TEXT,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        is_deleted INTEGER DEFAULT 0
         )
         """)
         
@@ -105,9 +126,14 @@ class UsernameUpdate(BaseModel):
     phone: str
     username: str
     name: str = ""
+    bio: str = ""
 
 class SearchUser(BaseModel):
     username: str
+
+class DeleteMessage(BaseModel):
+    message_id: int
+    user: str
 
 @app.get("/health")
 async def health_check():
@@ -119,22 +145,22 @@ async def get_user(phone: str):
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT phone, username, name, avatar FROM users WHERE phone=?", 
+            "SELECT phone, username, name, bio, avatar FROM users WHERE phone=?", 
             (phone,)
         )
         user = cursor.fetchone()
         conn.close()
         
         if user:
-            # Формируем полный URL для аватара
-            avatar_url = f"/avatars/{user[3]}" if user[3] else ""
+            avatar_url = f"/avatars/{user[4]}" if user[4] else ""
             return {
                 "phone": user[0],
                 "username": user[1],
                 "name": user[2],
+                "bio": user[3] or "",
                 "avatar": avatar_url
             }
-        return {"phone": phone, "username": None, "name": None, "avatar": ""}
+        return {"phone": phone, "username": None, "name": None, "bio": "", "avatar": ""}
     except Exception as e:
         logger.error(f"Error getting user {phone}: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
@@ -158,36 +184,34 @@ async def change_username(data: UsernameUpdate):
             return {"error": "Username должен начинаться с @"}
         
         name = data.name if data.name else data.username[1:]
+        bio = data.bio if data.bio else ""
         
         cursor.execute("""
             UPDATE users 
-            SET username=?, name=? 
+            SET username=?, name=?, bio=? 
             WHERE phone=?
-        """, (data.username, name, data.phone))
+        """, (data.username, name, bio, data.phone))
         
         conn.commit()
         conn.close()
         
-        logger.info(f"Username updated: {data.phone} -> {data.username}")
-        return {"ok": True, "username": data.username, "name": name}
+        logger.info(f"Profile updated: {data.phone}")
+        return {"ok": True, "username": data.username, "name": name, "bio": bio}
         
     except Exception as e:
-        logger.error(f"Error updating username: {e}")
+        logger.error(f"Error updating profile: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.post("/upload-avatar/{phone}")
 async def upload_avatar(phone: str, file: UploadFile = File(...)):
     try:
-        # Проверяем тип файла
         if not file.content_type.startswith('image/'):
             return JSONResponse(status_code=400, content={"error": "File must be an image"})
         
-        # Создаем имя файла
         file_extension = os.path.splitext(file.filename)[1]
         filename = f"{phone}{file_extension}"
         file_path = os.path.join(AVATAR_DIR, filename)
         
-        # Удаляем старый аватар если есть
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute("SELECT avatar FROM users WHERE phone=?", (phone,))
@@ -197,11 +221,9 @@ async def upload_avatar(phone: str, file: UploadFile = File(...)):
             if os.path.exists(old_path):
                 os.remove(old_path)
         
-        # Сохраняем новый файл
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        # Обновляем запись в БД
         cursor.execute(
             "UPDATE users SET avatar=? WHERE phone=?",
             (filename, phone)
@@ -222,7 +244,6 @@ async def remove_avatar(phone: str):
         conn = get_db()
         cursor = conn.cursor()
         
-        # Получаем имя файла
         cursor.execute("SELECT avatar FROM users WHERE phone=?", (phone,))
         result = cursor.fetchone()
         if result and result[0]:
@@ -230,7 +251,6 @@ async def remove_avatar(phone: str):
             if os.path.exists(file_path):
                 os.remove(file_path)
         
-        # Обновляем запись
         cursor.execute(
             "UPDATE users SET avatar=? WHERE phone=?",
             ("", phone)
@@ -245,13 +265,49 @@ async def remove_avatar(phone: str):
         logger.error(f"Error removing avatar: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+@app.post("/delete-message")
+async def delete_message(data: DeleteMessage):
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # Проверяем, что пользователь - автор сообщения
+        cursor.execute(
+            "SELECT sender FROM messages WHERE id=?",
+            (data.message_id,)
+        )
+        message = cursor.fetchone()
+        
+        if not message:
+            conn.close()
+            return {"error": "Message not found"}
+        
+        if message[0] != data.user:
+            conn.close()
+            return {"error": "You can only delete your own messages"}
+        
+        # Помечаем сообщение как удаленное (не удаляем из БД полностью)
+        cursor.execute(
+            "UPDATE messages SET is_deleted=1, text='Сообщение удалено' WHERE id=?",
+            (data.message_id,)
+        )
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"Message {data.message_id} deleted by {data.user}")
+        return {"ok": True}
+        
+    except Exception as e:
+        logger.error(f"Error deleting message: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 @app.post("/search")
 async def search_user(data: SearchUser):
     try:
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT phone, username, name, avatar FROM users WHERE username=?", 
+            "SELECT phone, username, name, bio, avatar FROM users WHERE username=?", 
             (data.username,)
         )
         user = cursor.fetchone()
@@ -260,12 +316,13 @@ async def search_user(data: SearchUser):
         if not user:
             return {"found": False}
         
-        avatar_url = f"/avatars/{user[3]}" if user[3] else ""
+        avatar_url = f"/avatars/{user[4]}" if user[4] else ""
         return {
             "found": True,
             "phone": user[0],
             "username": user[1],
             "name": user[2],
+            "bio": user[3] or "",
             "avatar": avatar_url
         }
     except Exception as e:
@@ -292,7 +349,7 @@ async def get_users(me: str):
             phone = contact[0]
             
             cursor.execute(
-                "SELECT phone, username, name, avatar FROM users WHERE phone=?", 
+                "SELECT phone, username, name, bio, avatar FROM users WHERE phone=?", 
                 (phone,)
             )
             user_data = cursor.fetchone()
@@ -303,7 +360,7 @@ async def get_users(me: str):
                     (phone, "")
                 )
                 conn.commit()
-                user_data = (phone, None, None, "")
+                user_data = (phone, None, None, None, "")
             
             cursor.execute("""
             SELECT text FROM messages 
@@ -313,12 +370,13 @@ async def get_users(me: str):
             last_msg = cursor.fetchone()
             
             display_name = user_data[2] or user_data[1] or phone
-            avatar_url = f"/avatars/{user_data[3]}" if user_data[3] else ""
+            avatar_url = f"/avatars/{user_data[4]}" if user_data[4] else ""
             
             result.append({
                 "phone": user_data[0],
                 "username": user_data[1],
                 "name": user_data[2],
+                "bio": user_data[3] or "",
                 "displayName": display_name,
                 "avatar": avatar_url,
                 "online": phone in clients,
@@ -369,6 +427,7 @@ async def websocket_endpoint(ws: WebSocket, user: str):
                         "INSERT INTO messages(sender, receiver, text) VALUES(?,?,?)",
                         (user, to, text)
                     )
+                    message_id = cursor.lastrowid
                     conn.commit()
                     conn.close()
 
@@ -377,10 +436,31 @@ async def websocket_endpoint(ws: WebSocket, user: str):
                             await clients[to].send_json({
                                 "action": "message",
                                 "from": user,
-                                "text": text
+                                "text": text,
+                                "id": message_id
                             })
                         except:
                             clients.pop(to, None)
+
+                elif action == "delete":
+                    message_id = data.get("message_id")
+                    if message_id:
+                        # Отправляем запрос на удаление
+                        async with httpx.AsyncClient() as client:
+                            response = await client.post(
+                                f"{os.getenv('BASE_URL', 'http://localhost:8000')}/delete-message",
+                                json={"message_id": message_id, "user": user}
+                            )
+                            result = response.json()
+                            
+                            if result.get("ok"):
+                                # Уведомляем собеседника об удалении
+                                to = data.get("to")
+                                if to and to in clients:
+                                    await clients[to].send_json({
+                                        "action": "message_deleted",
+                                        "message_id": message_id
+                                    })
 
                 elif action == "history":
                     chat_user = data.get("user")
@@ -388,8 +468,9 @@ async def websocket_endpoint(ws: WebSocket, user: str):
                         conn = get_db()
                         cursor = conn.cursor()
                         cursor.execute("""
-                        SELECT sender, text FROM messages
+                        SELECT id, sender, text FROM messages
                         WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?)
+                        AND is_deleted=0
                         ORDER BY timestamp
                         """, (user, chat_user, chat_user, user))
                         messages = cursor.fetchall()
@@ -397,7 +478,7 @@ async def websocket_endpoint(ws: WebSocket, user: str):
                         
                         await ws.send_json({
                             "action": "history", 
-                            "messages": [[m[0], m[1]] for m in messages]
+                            "messages": [[m[0], m[1], m[2]] for m in messages]
                         })
 
                 elif action == "typing":
@@ -419,6 +500,7 @@ async def websocket_endpoint(ws: WebSocket, user: str):
 
     finally:
         clients.pop(user, None)
+        logger.info(f"User {user} disconnected. Total: {len(clients)}")
 
 # Обслуживание статических файлов
 if os.path.exists("web"):
