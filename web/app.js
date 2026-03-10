@@ -27,6 +27,7 @@ function showToast(message, duration = 3000) {
 // Форматирование номера телефона
 function formatPhone(phone) {
     if (!phone) return 'Нет номера'
+    // Простое форматирование для российских номеров
     if (phone.length === 11) {
         return phone.replace(/(\d{1})(\d{3})(\d{3})(\d{2})(\d{2})/, '+$1 ($2) $3-$4-$5')
     }
@@ -36,9 +37,11 @@ function formatPhone(phone) {
 // Получение первой буквы для аватара
 function getAvatarLetter(name) {
     if (!name) return '👤'
+    // Если есть username с @
     if (name.startsWith('@') && name.length > 1) {
         return name[1].toUpperCase()
     }
+    // Обычное имя
     if (name.length > 0) {
         return name[0].toUpperCase()
     }
@@ -89,6 +92,7 @@ function login() {
 
     document.getElementById("myPhone").innerText = formatPhone(phone)
     
+    // Загружаем профиль пользователя
     loadUserProfile()
     connect()
     loadChats()
@@ -103,9 +107,17 @@ async function loadUserProfile() {
         
         currentUserProfile = data
         
+        // Отображаем профиль
         const displayName = data.name || data.username || data.phone
         document.getElementById("myDisplayName").innerText = displayName
-        document.getElementById("myAvatarText").innerText = getAvatarLetter(displayName)
+        
+        // Обновляем аватар в профиле
+        const myAvatar = document.getElementById("myAvatarText")
+        if (data.avatar) {
+            myAvatar.innerHTML = `<img src="${data.avatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`
+        } else {
+            myAvatar.innerText = getAvatarLetter(displayName)
+        }
         
     } catch (error) {
         console.error("Error loading profile:", error)
@@ -132,24 +144,36 @@ async function showUserProfile(phone, isMyProfile = false) {
         const user = await res.json()
         
         const modal = document.getElementById('profileModal')
-        const profileView = document.querySelector('.profile-view')
+        const profileView = document.getElementById('profileView')
         const profileEdit = document.getElementById('profileEdit')
         const modalActions = document.getElementById('modalActions')
         
+        // Заполняем данные
         const displayName = user.name || user.username || user.phone
-        document.getElementById('modalAvatarText').innerText = getAvatarLetter(displayName)
+        
+        // Отображаем аватар
+        const modalAvatar = document.getElementById('modalAvatarText')
+        if (user.avatar) {
+            modalAvatar.innerHTML = `<img src="${user.avatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`
+        } else {
+            modalAvatar.innerText = getAvatarLetter(displayName)
+        }
+        
         document.getElementById('modalName').innerText = user.name || 'Не указано'
         document.getElementById('modalUsername').innerText = user.username || 'Не установлен'
         document.getElementById('modalPhone').innerText = formatPhone(user.phone)
         
-        const isOnline = phone in clients
+        // Статус онлайн/оффлайн
+        const isOnline = phone in window.clients || false
         document.getElementById('modalStatus').innerHTML = isOnline ? 
             '<span style="color: #4ade80;">● Онлайн</span>' : 
             '<span style="color: #f87171;">● Оффлайн</span>'
         
+        // Действия в зависимости от того, свой профиль или чужой
         modalActions.innerHTML = ''
         
         if (isMyProfile) {
+            // Свой профиль - кнопка редактирования
             profileView.style.display = 'block'
             profileEdit.style.display = 'none'
             
@@ -159,12 +183,22 @@ async function showUserProfile(phone, isMyProfile = false) {
             editBtn.onclick = () => {
                 document.getElementById('editName').value = user.name || ''
                 document.getElementById('editUsername').value = user.username || ''
+                
+                // Сбрасываем предпросмотр аватара
+                const previewAvatar = document.getElementById('previewAvatarText')
+                if (user.avatar) {
+                    previewAvatar.innerHTML = `<img src="${user.avatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`
+                } else {
+                    previewAvatar.innerText = getAvatarLetter(displayName)
+                }
+                
                 profileView.style.display = 'none'
                 profileEdit.style.display = 'block'
             }
             modalActions.appendChild(editBtn)
             
         } else {
+            // Чужой профиль - кнопка "Написать"
             profileView.style.display = 'block'
             profileEdit.style.display = 'none'
             
@@ -186,6 +220,97 @@ async function showUserProfile(phone, isMyProfile = false) {
     }
 }
 
+// Предпросмотр аватара перед загрузкой
+document.getElementById('avatarInput')?.addEventListener('change', function(e) {
+    const file = e.target.files[0]
+    if (file) {
+        const reader = new FileReader()
+        reader.onload = function(e) {
+            document.getElementById('previewAvatarText').innerHTML = 
+                `<img src="${e.target.result}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`
+        }
+        reader.readAsDataURL(file)
+    }
+})
+
+// Загрузка аватара
+async function uploadAvatar() {
+    const input = document.getElementById('avatarInput')
+    const file = input.files[0]
+    
+    if (!file) {
+        showToast("Выберите файл")
+        return
+    }
+    
+    // Проверка размера (макс 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+        showToast("Файл слишком большой (макс 2MB)")
+        return
+    }
+    
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    try {
+        const res = await fetch(`/upload-avatar/${currentUser}`, {
+            method: 'POST',
+            body: formData
+        })
+        
+        const data = await res.json()
+        
+        if (data.error) {
+            showToast(data.error)
+            return
+        }
+        
+        showToast('Аватар загружен')
+        
+        // Обновляем отображение
+        await loadUserProfile()
+        loadChats()
+        
+        // Закрываем модальное окно
+        closeModal()
+        
+    } catch (error) {
+        console.error("Error uploading avatar:", error)
+        showToast("Ошибка загрузки")
+    }
+}
+
+// Удаление аватара
+async function removeAvatar() {
+    if (!confirm('Удалить аватар?')) return
+    
+    try {
+        const res = await fetch(`/remove-avatar/${currentUser}`, {
+            method: 'POST'
+        })
+        
+        const data = await res.json()
+        
+        if (data.error) {
+            showToast(data.error)
+            return
+        }
+        
+        showToast('Аватар удален')
+        
+        // Обновляем отображение
+        document.getElementById('previewAvatarText').innerText = '👤'
+        document.getElementById('avatarInput').value = ''
+        
+        await loadUserProfile()
+        loadChats()
+        
+    } catch (error) {
+        console.error("Error removing avatar:", error)
+        showToast("Ошибка удаления")
+    }
+}
+
 // Сохранить профиль
 async function saveProfile() {
     const username = document.getElementById('editUsername').value.trim()
@@ -199,6 +324,12 @@ async function saveProfile() {
     if (!username.startsWith('@')) {
         showToast("Username должен начинаться с @")
         return
+    }
+    
+    // Сначала загружаем аватар, если выбран
+    const avatarInput = document.getElementById('avatarInput')
+    if (avatarInput.files.length > 0) {
+        await uploadAvatar()
     }
     
     try {
@@ -222,6 +353,7 @@ async function saveProfile() {
         showToast('Профиль обновлен')
         closeModal()
         
+        // Обновляем отображение
         await loadUserProfile()
         loadChats()
         
@@ -233,7 +365,7 @@ async function saveProfile() {
 
 // Отмена редактирования
 function cancelEdit() {
-    document.querySelector('.profile-view').style.display = 'block'
+    document.getElementById('profileView').style.display = 'block'
     document.getElementById('profileEdit').style.display = 'none'
 }
 
@@ -244,6 +376,7 @@ function closeModal() {
 
 // Подключение WebSocket
 function connect() {
+    // Очищаем предыдущие интервалы
     if (pingInterval) clearInterval(pingInterval)
     if (reconnectTimeout) clearTimeout(reconnectTimeout)
 
@@ -260,6 +393,7 @@ function connect() {
             reconnectAttempts = 0
             showToast('Подключено к серверу')
             
+            // Пинг каждые 30 секунд
             pingInterval = setInterval(() => {
                 if (ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ action: 'ping' }))
@@ -271,6 +405,7 @@ function connect() {
             try {
                 const data = JSON.parse(event.data)
 
+                // Игнорируем pong
                 if (data.action === 'pong') return
 
                 if (data.action === "message") {
@@ -285,6 +420,7 @@ function connect() {
                     // Обновляем чат и поднимаем его наверх
                     updateSingleChat(data.from, true)
                     
+                    // Показываем уведомление
                     showToast(`Новое сообщение`)
                     if (window.navigator.vibrate) {
                         window.navigator.vibrate(200)
@@ -370,13 +506,6 @@ async function loadChats() {
             chatsCache[chat.phone] = chat
         })
         
-        // Сортируем чаты по последнему сообщению (самые новые сверху)
-        chats.sort((a, b) => {
-            if (!a.last) return 1
-            if (!b.last) return -1
-            return 0 // В реальности тут нужно сравнивать timestamp
-        })
-        
         renderChatList(chats)
 
     } catch (error) {
@@ -402,9 +531,6 @@ function renderChatList(chats) {
 function createChatElement(chat) {
     const displayName = chat.displayName || chat.name || chat.username || chat.phone
     const lastMessage = chat.last || 'Нет сообщений'
-    const avatarLetter = getAvatarLetter(displayName)
-    
-    // Получаем количество непрочитанных
     const unreadCount = unreadCounts[chat.phone] || 0
     
     let div = document.createElement("div")
@@ -415,12 +541,20 @@ function createChatElement(chat) {
         div.classList.add('active')
     }
     
-    // Добавляем бейдж с непрочитанными если есть
+    // Аватар: если есть - показываем картинку, если нет - букву
+    let avatarHtml
+    if (chat.avatar) {
+        avatarHtml = `<img src="${chat.avatar}" class="chat-avatar-img" alt="avatar">`
+    } else {
+        avatarHtml = escapeHtml(getAvatarLetter(displayName))
+    }
+    
+    // Бейдж с непрочитанными
     const unreadBadge = unreadCount > 0 ? 
         `<span class="unread-badge">${unreadCount > 99 ? '99+' : unreadCount}</span>` : ''
     
     div.innerHTML = `
-        <div class="chat-avatar">${escapeHtml(avatarLetter)}</div>
+        <div class="chat-avatar">${avatarHtml}</div>
         <div class="chat-info">
             <div class="chat-name">${escapeHtml(displayName)}</div>
             <div class="chat-last-message">${escapeHtml(lastMessage)}</div>
@@ -436,7 +570,7 @@ function createChatElement(chat) {
 // Обновление одного чата и поднятие наверх
 async function updateSingleChat(phone, moveToTop = false) {
     try {
-        // Загружаем обновленные данные
+        // Загружаем обновленные данные для этого чата
         const userRes = await fetch(`/user/${phone}`)
         const userData = await userRes.json()
         
@@ -467,7 +601,13 @@ async function updateSingleChat(phone, moveToTop = false) {
             
             if (nameElement) nameElement.innerText = displayName
             if (lastMessageElement) lastMessageElement.innerText = lastMessage
-            if (avatarElement) avatarElement.innerText = getAvatarLetter(displayName)
+            
+            // Обновляем аватар
+            if (updatedChat.avatar) {
+                avatarElement.innerHTML = `<img src="${updatedChat.avatar}" class="chat-avatar-img" alt="avatar">`
+            } else {
+                avatarElement.innerText = getAvatarLetter(displayName)
+            }
             
             // Обновляем/добавляем бейдж
             let badge = existingChat.querySelector('.unread-badge')
@@ -523,7 +663,18 @@ function openChat(phone, displayName) {
             const name = user.name || user.username || phone
             document.getElementById("chatUserName").innerText = name
             document.getElementById("chatUserPhone").innerText = formatPhone(phone)
-            document.getElementById("chatAvatarText").innerText = getAvatarLetter(name)
+            
+            // Обновляем аватар в шапке чата
+            const chatAvatar = document.getElementById("chatAvatarText")
+            if (user.avatar) {
+                chatAvatar.innerHTML = `<img src="${user.avatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`
+            } else {
+                chatAvatar.innerText = getAvatarLetter(name)
+            }
+            
+            // Обновляем статус
+            const isOnline = phone in window.clients || false
+            document.getElementById('chatUserStatus').textContent = isOnline ? 'online' : 'offline'
         })
         .catch(() => {
             document.getElementById("chatUserName").innerText = displayName || phone
@@ -591,7 +742,7 @@ function send() {
     document.getElementById("text").value = ""
 }
 
-// Добавление сообщения
+// Добавление сообщения в окно чата
 function addMessage(user, text) {
     const messagesDiv = document.getElementById("messages")
     const div = document.createElement("div")
@@ -656,6 +807,7 @@ async function search() {
             return
         }
 
+        // Показываем профиль найденного пользователя
         showUserProfile(data.phone, false)
         document.getElementById("searchUser").value = ""
 
@@ -665,7 +817,7 @@ async function search() {
     }
 }
 
-// Обработка Enter
+// Обработка Enter для отправки
 document.getElementById("text").addEventListener("keypress", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault()
@@ -707,12 +859,12 @@ window.addEventListener('resize', () => {
     }
 })
 
-// Инициализация
+// Инициализация при загрузке страницы
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('loginPhone').focus()
 })
 
-// Очистка при закрытии
+// Очистка при закрытии страницы
 window.addEventListener('beforeunload', () => {
     if (pingInterval) clearInterval(pingInterval)
     if (reconnectTimeout) clearTimeout(reconnectTimeout)
