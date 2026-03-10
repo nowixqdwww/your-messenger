@@ -560,6 +560,20 @@ async def websocket_endpoint(ws: WebSocket, user: str):
                                 "message_id": message_id
                             })
 
+                elif action == "status":
+                    to = data.get("to")
+                    online = data.get("online", True)
+                    
+                    if to and to in clients:
+                        try:
+                            await clients[to].send_json({
+                                "action": "status",
+                                "from": user,
+                                "online": online
+                            })
+                        except:
+                            clients.pop(to, None)
+                
                 elif action == "history":
                     chat_user = data.get("user")
                     if chat_user:
@@ -614,3 +628,4 @@ if __name__ == "__main__":
         port=port,
         reload=False
     )
+
