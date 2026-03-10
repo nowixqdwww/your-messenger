@@ -305,6 +305,9 @@ async def delete_chat(data: dict):
         user = data.get("user")
         chat_with = data.get("chat_with")
         
+        if not user or not chat_with:
+            return JSONResponse(status_code=400, content={"error": "Missing parameters"})
+        
         conn = await get_db()
         
         # Удаляем все сообщения между пользователями
@@ -329,6 +332,9 @@ async def clear_chat(data: dict):
         user = data.get("user")
         chat_with = data.get("chat_with")
         
+        if not user or not chat_with:
+            return JSONResponse(status_code=400, content={"error": "Missing parameters"})
+        
         conn = await get_db()
         
         # Помечаем сообщения как удаленные (мягкое удаление)
@@ -347,7 +353,7 @@ async def clear_chat(data: dict):
     except Exception as e:
         logger.error(f"Error clearing chat: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
-
+        
 @app.post("/search")
 async def search_user(data: SearchUser):
     try:
@@ -591,3 +597,4 @@ if __name__ == "__main__":
         port=port,
         reload=False
     )
+
