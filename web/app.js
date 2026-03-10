@@ -1135,21 +1135,33 @@ async function clearChat() {
             })
         })
         
-        if (res.ok) {
-            if (currentChat === selectedChatPhone) {
-                document.getElementById("messages").innerHTML = ""
-            }
-            
-            const chatElement = document.getElementById(`chat-${selectedChatPhone}`)
-            if (chatElement) {
-                const lastMsgElement = chatElement.querySelector('.chat-last-message')
-                if (lastMsgElement) {
-                    lastMsgElement.innerText = 'Нет сообщений'
-                }
-            }
-            
-            showToast('История очищена')
+        if (!res.ok) {
+            const errorText = await res.text()
+            console.error('Clear chat error:', res.status, errorText)
+            showToast(`Ошибка: ${res.status}`)
+            return
         }
+        
+        const data = await res.json()
+        
+        if (data.error) {
+            showToast(data.error)
+            return
+        }
+        
+        if (currentChat === selectedChatPhone) {
+            document.getElementById("messages").innerHTML = ""
+        }
+        
+        const chatElement = document.getElementById(`chat-${selectedChatPhone}`)
+        if (chatElement) {
+            const lastMsgElement = chatElement.querySelector('.chat-last-message')
+            if (lastMsgElement) {
+                lastMsgElement.innerText = 'Нет сообщений'
+            }
+        }
+        
+        showToast('История очищена')
         
     } catch (error) {
         console.error("Error clearing chat:", error)
@@ -1271,4 +1283,5 @@ window.addEventListener('beforeunload', () => {
 
 // Периодическое обновление онлайн статусов
 setInterval(updateOnlineStatus, 5000)
+
 
