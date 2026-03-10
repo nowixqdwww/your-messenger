@@ -94,7 +94,7 @@ body {
     transform: scale(0.98);
 }
 
-/* App Layout - важно для растягивания */
+/* App Layout */
 .app {
     display: none;
     height: 100vh;
@@ -124,7 +124,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    flex-shrink: 0; /* Не сжимается */
+    flex-shrink: 0;
 }
 
 .menu-toggle {
@@ -149,7 +149,7 @@ body {
     padding: 15px;
     border-bottom: 1px solid #2f3a4a;
     background: #1e2a3a;
-    flex-shrink: 0; /* Не сжимается */
+    flex-shrink: 0;
 }
 
 .profile-header {
@@ -166,24 +166,93 @@ body {
     background: #2f3a4a;
 }
 
-.profile-avatar {
-    width: 50px;
-    height: 50px;
+/* Исправленные стили для аватарок */
+.profile-avatar, 
+.chat-avatar, 
+.chat-user-avatar,
+.profile-view-avatar,
+.avatar-preview {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 50%;
+    border-radius: 50% !important;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
-    font-size: 24px;
     font-weight: bold;
-    position: relative;
+    overflow: hidden;
     flex-shrink: 0;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+}
+
+/* Для изображений внутри аватарок */
+.profile-avatar img,
+.chat-avatar img,
+.chat-user-avatar img,
+.profile-view-avatar img,
+.avatar-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50% !important;
+}
+
+/* Размеры для разных типов аватаров */
+.profile-avatar {
+    width: 50px;
+    height: 50px;
+    min-width: 50px;
+    min-height: 50px;
+    max-width: 50px;
+    max-height: 50px;
+    font-size: 24px;
+}
+
+.chat-avatar {
+    width: 50px;
+    height: 50px;
+    min-width: 50px;
+    min-height: 50px;
+    max-width: 50px;
+    max-height: 50px;
+    font-size: 20px;
+}
+
+.chat-user-avatar {
+    width: 45px;
+    height: 45px;
+    min-width: 45px;
+    min-height: 45px;
+    max-width: 45px;
+    max-height: 45px;
+    font-size: 20px;
+}
+
+.profile-view-avatar {
+    width: 120px;
+    height: 120px;
+    min-width: 120px;
+    min-height: 120px;
+    max-width: 120px;
+    max-height: 120px;
+    font-size: 48px;
+    margin: 0 auto 20px;
+}
+
+.avatar-preview {
+    width: 120px;
+    height: 120px;
+    min-width: 120px;
+    min-height: 120px;
+    max-width: 120px;
+    max-height: 120px;
+    font-size: 48px;
+    margin: 0 auto 20px;
 }
 
 .profile-info {
     flex: 1;
-    min-width: 0; /* Важно для обрезки текста */
+    min-width: 0;
 }
 
 .profile-name {
@@ -223,7 +292,7 @@ body {
     border-bottom: 1px solid #2f3a4a;
     display: flex;
     gap: 10px;
-    flex-shrink: 0; /* Не сжимается */
+    flex-shrink: 0;
 }
 
 .search-input {
@@ -268,7 +337,7 @@ body {
     color: #8e9aaf;
     font-weight: bold;
     border-bottom: 1px solid #2f3a4a;
-    flex-shrink: 0; /* Не сжимается */
+    flex-shrink: 0;
 }
 
 .chats-count {
@@ -280,10 +349,10 @@ body {
 }
 
 .chat-list {
-    flex: 1; /* Растягивается на всю доступную высоту */
+    flex: 1;
     overflow-y: auto;
     padding: 10px;
-    min-height: 0; /* Важно для flex-child */
+    min-height: 0;
 }
 
 .chatItem {
@@ -291,10 +360,10 @@ body {
     border-radius: 10px;
     margin-bottom: 5px;
     cursor: pointer;
-    transition: background 0.2s;
     display: flex;
     align-items: center;
     gap: 15px;
+    transition: none;
 }
 
 .chatItem:hover {
@@ -305,23 +374,9 @@ body {
     background: #2f3a4a;
 }
 
-.chat-avatar {
-    width: 50px;
-    height: 50px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-size: 20px;
-    font-weight: bold;
-    flex-shrink: 0;
-}
-
 .chat-info {
     flex: 1;
-    min-width: 0; /* Для обрезки текста */
+    min-width: 0;
 }
 
 .chat-name {
@@ -353,9 +408,32 @@ body {
     background: #f87171;
 }
 
-/* Chat Area - важно для растягивания */
+/* Unread badge */
+.unread-badge {
+    background: #667eea;
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+    min-width: 20px;
+    height: 20px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 6px;
+    margin-left: auto;
+    margin-right: 10px;
+    flex-shrink: 0;
+}
+
+.chatItem.active .unread-badge {
+    background: white;
+    color: #667eea;
+}
+
+/* Chat Area */
 .chat-area {
-    flex: 1; /* Растягивается на всё оставшееся место */
+    flex: 1;
     display: flex;
     flex-direction: column;
     background: #f0f2f5;
@@ -403,7 +481,7 @@ body {
     display: flex;
     align-items: center;
     gap: 15px;
-    flex-shrink: 0; /* Не сжимается */
+    flex-shrink: 0;
     cursor: pointer;
 }
 
@@ -426,27 +504,13 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
-    min-width: 0; /* Для обрезки текста */
-}
-
-.chat-user-avatar {
-    width: 45px;
-    height: 45px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-size: 20px;
-    font-weight: bold;
-    flex-shrink: 0;
+    min-width: 0;
 }
 
 .chat-user-details {
     display: flex;
     flex-direction: column;
-    min-width: 0; /* Для обрезки текста */
+    min-width: 0;
 }
 
 .chat-user-name {
@@ -493,16 +557,16 @@ body {
     background: #f0f0f0;
 }
 
-/* Messages - растягивается */
+/* Messages */
 .messages {
-    flex: 1; /* Растягивается на всё доступное место */
+    flex: 1;
     overflow-y: auto;
     padding: 20px;
     display: flex;
     flex-direction: column;
     gap: 10px;
     background: #f0f2f5;
-    min-height: 0; /* Важно для flex-child */
+    min-height: 0;
 }
 
 .message {
@@ -550,7 +614,7 @@ body {
     text-align: right;
 }
 
-/* Input Area - фиксируется внизу */
+/* Input Area */
 .input-area {
     display: flex;
     padding: 15px 20px;
@@ -558,7 +622,7 @@ body {
     border-top: 1px solid #e0e0e0;
     gap: 10px;
     align-items: center;
-    flex-shrink: 0; /* Не сжимается */
+    flex-shrink: 0;
 }
 
 .message-input {
@@ -665,20 +729,6 @@ body {
     gap: 20px;
 }
 
-.profile-view-avatar {
-    width: 120px;
-    height: 120px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 50%;
-    margin: 0 auto 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-size: 48px;
-    font-weight: bold;
-}
-
 .profile-view-field {
     border-bottom: 1px solid #f0f0f0;
     padding: 15px 0;
@@ -728,6 +778,44 @@ body {
     border-color: #667eea;
 }
 
+/* Avatar upload */
+.avatar-upload {
+    text-align: center;
+}
+
+.upload-controls {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.upload-btn, .remove-avatar-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.upload-btn {
+    background: #667eea;
+    color: white;
+}
+
+.upload-btn:hover {
+    background: #5a67d8;
+}
+
+.remove-avatar-btn {
+    background: #f0f0f0;
+    color: #666;
+}
+
+.remove-avatar-btn:hover {
+    background: #e0e0e0;
+}
+
 .edit-actions {
     display: flex;
     gap: 10px;
@@ -756,7 +844,7 @@ body {
     cursor: pointer;
 }
 
-/* Действия в профиле */
+/* Profile actions */
 .profile-actions {
     display: flex;
     gap: 10px;
@@ -854,9 +942,43 @@ body {
     .search-btn {
         width: 100%;
     }
-
+    
     .chat-area {
         width: 100%;
+    }
+    
+    /* Mobile avatar sizes */
+    .profile-avatar {
+        width: 45px;
+        height: 45px;
+        min-width: 45px;
+        min-height: 45px;
+        font-size: 22px;
+    }
+    
+    .chat-avatar {
+        width: 45px;
+        height: 45px;
+        min-width: 45px;
+        min-height: 45px;
+        font-size: 18px;
+    }
+    
+    .chat-user-avatar {
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        min-height: 40px;
+        font-size: 18px;
+    }
+    
+    .profile-view-avatar,
+    .avatar-preview {
+        width: 100px;
+        height: 100px;
+        min-width: 100px;
+        min-height: 100px;
+        font-size: 40px;
     }
 }
 
@@ -884,11 +1006,29 @@ body {
         white-space: normal;
         text-align: center;
     }
-
-    .profile-view-avatar {
-        width: 100px;
-        height: 100px;
-        font-size: 40px;
+    
+    .profile-avatar {
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        min-height: 40px;
+        font-size: 20px;
+    }
+    
+    .chat-avatar {
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        min-height: 40px;
+        font-size: 16px;
+    }
+    
+    .chat-user-avatar {
+        width: 35px;
+        height: 35px;
+        min-width: 35px;
+        min-height: 35px;
+        font-size: 16px;
     }
 }
 
@@ -902,197 +1042,39 @@ body {
         padding: 10px;
     }
 
-    .profile-avatar {
-        width: 40px;
-        height: 40px;
-        font-size: 20px;
-    }
-
     .chat-list {
         max-height: calc(100vh - 200px);
+    }
+    
+    .profile-view-avatar,
+    .avatar-preview {
+        width: 80px;
+        height: 80px;
+        min-width: 80px;
+        min-height: 80px;
+        font-size: 32px;
     }
 }
 
 /* Touch optimizations */
 @media (hover: none) and (pointer: coarse) {
-    .chatItem,
-    .save-btn,
-    .search-btn,
+    .chatItem, 
+    .save-btn, 
+    .search-btn, 
     .send-btn,
-    .action-button {
+    .action-button,
+    .upload-btn,
+    .remove-avatar-btn {
         min-height: 44px;
     }
 
     .message-input {
         font-size: 16px;
     }
-
 }
 
-/* Плавное обновление чатов без анимации */
-.chatItem {
-    transition: none; /* Убираем анимацию */
-}
-
-.chat-avatar, .chat-name, .chat-last-message {
-    transition: none; /* Убираем анимацию */
-}
-
-/* Для мобильных */
-@media (max-width: 768px) {
-    .chatItem {
-        transition: none;
-    }
-}
-
-/* Бейдж с количеством непрочитанных сообщений */
-.unread-badge {
-    background: #667eea;
-    color: white;
-    font-size: 12px;
-    font-weight: bold;
-    min-width: 20px;
-    height: 20px;
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 6px;
-    margin-left: auto;
-    margin-right: 10px;
-    animation: none; /* Без анимации */
-}
-
-/* Активный чат */
-.chatItem.active {
-    background: #2f3a4a;
-}
-
-.chatItem.active .unread-badge {
-    background: white;
-    color: #667eea;
-}
-
-/* Для мобильных */
-@media (max-width: 768px) {
-    .unread-badge {
-        min-width: 18px;
-        height: 18px;
-        font-size: 11px;
-    }
-}
-
-/* Убираем все анимации */
-.chatItem, .unread-badge, .chat-avatar, .chat-name, .chat-last-message {
+/* No animations */
+.chatItem, .unread-badge, .chat-avatar, .chat-name, .chat-last-message,
+.profile-avatar, .chat-user-avatar, .profile-view-avatar, .avatar-preview {
     transition: none;
-}
-
-/* Стили для аватаров */
-.chat-avatar-img {
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    object-fit: cover;
-}
-
-.avatar-upload {
-    text-align: center;
-}
-
-.avatar-preview {
-    width: 120px;
-    height: 120px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 50%;
-    margin: 0 auto 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-size: 48px;
-    font-weight: bold;
-    overflow: hidden;
-}
-
-.upload-controls {
-    display: flex;
-    gap: 10px;
-    justify-content: center;
-}
-
-.upload-btn, .remove-avatar-btn {
-    padding: 10px 20px;
-    border: none;
-    border-radius: 8px;
-    font-size: 14px;
-    cursor: pointer;
-    transition: background 0.2s;
-}
-
-.upload-btn {
-    background: #667eea;
-    color: white;
-}
-
-.upload-btn:hover {
-    background: #5a67d8;
-}
-
-.remove-avatar-btn {
-    background: #f0f0f0;
-    color: #666;
-}
-
-.remove-avatar-btn:hover {
-    background: #e0e0e0;
-}
-
-/* Для аватаров в чатах */
-.chat-avatar {
-    width: 50px;
-    height: 50px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-size: 20px;
-    font-weight: bold;
-    overflow: hidden;
-}
-
-.chat-user-avatar {
-    width: 45px;
-    height: 45px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-size: 20px;
-    font-weight: bold;
-    overflow: hidden;
-}
-
-/* Для мобильных */
-@media (max-width: 768px) {
-    .chat-avatar {
-        width: 45px;
-        height: 45px;
-        font-size: 18px;
-    }
-    
-    .chat-user-avatar {
-        width: 40px;
-        height: 40px;
-        font-size: 18px;
-    }
-    
-    .avatar-preview {
-        width: 100px;
-        height: 100px;
-        font-size: 40px;
-    }
 }
