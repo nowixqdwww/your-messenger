@@ -921,48 +921,77 @@ function addMessage(user, text, messageId = null) {
     if (user === currentUser && messageId) {
         // Флаг для отслеживания долгого нажатия
         let isLongPress = false
+        let touchTimeout
         
         // Обработчики для мыши (ПК)
         div.addEventListener('mousedown', () => {
             isLongPress = false
         })
         
-        div.addEventListener('mouseup', () => {
-            if (!isLongPress) {
+        div.addEventListener('mouseup', (e) => {
+            if (!isLongPress && e.button === 0) { // ЛКМ
                 // Обычный клик - ничего не делаем
             }
-        })
-        
-        // Обработчики для касания (мобильные)
-        div.addEventListener('touchstart', (e) => {
-            isLongPress = false
-            longPressTimer = setTimeout(() => {
-                isLongPress = true
-                if (window.navigator.vibrate) {
-                    window.navigator.vibrate(50)
-                }
-                showContextMenu(e, 'message', { messageId: messageId, element: div })
-            }, 500)
-        })
-        
-        div.addEventListener('touchend', (e) => {
-            clearTimeout(longPressTimer)
-        })
-        
-        div.addEventListener('touchmove', () => {
-            clearTimeout(longPressTimer)
-            isLongPress = true
-        })
-        
-        div.addEventListener('touchcancel', () => {
-            clearTimeout(longPressTimer)
         })
         
         // ПКМ для контекстного меню
         div.addEventListener('contextmenu', (e) => {
             e.preventDefault()
+            e.stopPropagation()
             showContextMenu(e, 'message', { messageId: messageId, element: div })
         })
+        
+        // Обработчики для касания (мобильные)
+        div.addEventListener('touchstart', (e) => {
+            e.preventDefault() // Предотвращаем выделение
+            isLongPress = false
+            
+            // Запоминаем начальную позицию для определения свайпа
+            const touch = e.touches[0]
+            const startX = touch.clientX
+            const startY = touch.clientY
+            
+            touchTimeout = setTimeout(() => {
+                isLongPress = true
+                // Вибрация при долгом нажатии
+                if (window.navigator.vibrate) {
+                    window.navigator.vibrate(50)
+                }
+                // Показываем меню в месте касания
+                showContextMenu(e, 'message', { messageId: messageId, element: div })
+            }, 500)
+            
+            // Отслеживаем движение пальца
+            const onTouchMove = (moveEvent) => {
+                const moveTouch = moveEvent.touches[0]
+                const moveX = moveTouch.clientX
+                const moveY = moveTouch.clientY
+                
+                // Если палец сдвинулся больше чем на 10px - отменяем долгое нажатие
+                if (Math.abs(moveX - startX) > 10 || Math.abs(moveY - startY) > 10) {
+                    clearTimeout(touchTimeout)
+                    isLongPress = true
+                    div.removeEventListener('touchmove', onTouchMove)
+                }
+            }
+            
+            div.addEventListener('touchmove', onTouchMove, { passive: false })
+            
+            div.addEventListener('touchend', () => {
+                clearTimeout(touchTimeout)
+                div.removeEventListener('touchmove', onTouchMove)
+                
+                if (!isLongPress) {
+                    // Обычное касание - ничего не делаем с сообщением
+                    // Не открываем ничего, просто убираем выделение
+                }
+            }, { once: true })
+            
+            div.addEventListener('touchcancel', () => {
+                clearTimeout(touchTimeout)
+                div.removeEventListener('touchmove', onTouchMove)
+            }, { once: true })
+        }, { passive: false })
     }
     
     messagesDiv.appendChild(div)
@@ -1446,3 +1475,4 @@ window.addEventListener('beforeunload', () => {
 
 // Периодическое обновление статусов
 setInterval(updateOnlineStatus, 5000)
+
