@@ -10,6 +10,7 @@ import json
 from datetime import datetime
 from pydantic import BaseModel
 import uvicorn
+import urllib.parse
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -485,5 +486,6 @@ if __name__ == "__main__":
         port=port,
         reload=False
     )
+
 
 
