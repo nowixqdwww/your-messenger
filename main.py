@@ -482,24 +482,27 @@ async def search_user(data: SearchUser):
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.get("/search-users/{query}")
-async def search_users(query: str):
+async def search_users(query: str, current_user: str = None):
     try:
         if len(query) < 2:
             return {"users": []}
         
         conn = await get_db()
         
+        # Ищем пользователей по username или имени
         users = await conn.fetch('''
-            SELECT phone, username, name, avatar 
-            FROM users 
-            WHERE username ILIKE $1 OR name ILIKE $1
+            SELECT u.phone, u.username, u.name, u.avatar, 
+                   ps.phone_privacy
+            FROM users u
+            LEFT JOIN privacy_settings ps ON u.phone = ps.phone
+            WHERE u.username ILIKE $1 OR u.name ILIKE $1
             ORDER BY 
                 CASE 
-                    WHEN username ILIKE $2 THEN 1
-                    WHEN username ILIKE $3 THEN 2
+                    WHEN u.username ILIKE $2 THEN 1
+                    WHEN u.username ILIKE $3 THEN 2
                     ELSE 3
                 END,
-                username
+                u.username
             LIMIT 10
         ''', f'%{query}%', f'{query}%', f'%{query}')
         
@@ -507,13 +510,17 @@ async def search_users(query: str):
         
         result = []
         for user in users:
+            # Проверяем, нужно ли показывать номер
+            show_phone = user['phone_privacy'] == 'everyone'
+            
             avatar_url = f"/avatars/{user['avatar']}" if user['avatar'] else ""
             result.append({
-                "phone": user['phone'],
+                "phone": user['phone'] if show_phone else "hidden",
                 "username": user['username'],
                 "name": user['name'],
                 "avatar": avatar_url,
-                "displayName": user['name'] or user['username'] or user['phone']
+                "displayName": user['name'] or user['username'] or "Пользователь",
+                "phone_hidden": not show_phone
             })
         
         return {"users": result}
@@ -719,3 +726,4 @@ if __name__ == "__main__":
         port=port,
         reload=False
     )
+
