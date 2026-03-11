@@ -507,11 +507,18 @@ function openChatProfile() {
 
 async function showUserProfile(phone, isMyProfile = false) {
     try {
-        const res = await fetch(`/user/${phone}`)
+        // Если номер скрыт, но мы открываем профиль через поиск
+        let actualPhone = phone
+        if (phone === 'hidden') {
+            showToast("Ошибка загрузки профиля")
+            return
+        }
+        
+        const res = await fetch(`/user/${actualPhone}`)
         if (!res.ok) throw new Error('Failed to load user')
         const user = await res.json()
         
-        const settingsRes = await fetch(`/privacy-settings/${phone}`)
+        const settingsRes = await fetch(`/privacy-settings/${actualPhone}`)
         const settings = await settingsRes.json()
         
         const modal = document.getElementById('profileModal')
@@ -1377,7 +1384,6 @@ async function searchUsers(query) {
 
 function displaySearchResults(users, query) {
     const resultsDiv = document.getElementById('searchResults')
-    const searchInput = document.getElementById('searchUser')
     
     if (!resultsDiv) return
     
@@ -1765,4 +1771,3 @@ window.addEventListener('beforeunload', () => {
 })
 
 setInterval(updateOnlineStatus, 5000)
-
