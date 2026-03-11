@@ -9,6 +9,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
     <!-- Font Awesome для линейных иконок -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js"></script>
     <link rel="apple-touch-icon" href="/icon.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -21,7 +24,9 @@
         <h1>NonBlock</h1>
         <p>Введите номер телефона</p>
         <input id="loginPhone" type="tel" placeholder="+7 (999) 999-99-99" class="login-input">
-        <button onclick="login()" class="login-btn">Войти</button>
+        <button onclick="login()" class="login-btn">
+            <i class="fas fa-paper-plane"></i> Войти
+        </button>
     </div>
 </div>
 
@@ -355,6 +360,31 @@
         </div>
     </div>
 </div>
+
+<!-- Модальное окно для ввода SMS кода -->
+<div id="verificationModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Подтверждение номера</h2>
+            <button class="close-btn" onclick="closeVerificationModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <p>Мы отправили SMS с кодом на номер <br> <strong id="displayPhone"></strong></p>
+            <input type="text" id="verificationCode" placeholder="XXXXXX" class="login-input" maxlength="6">
+            <button onclick="submitVerificationCode()" class="login-btn">
+                <i class="fas fa-check"></i> Подтвердить
+            </button>
+            <button onclick="resendCode()" class="cancel-profile-btn" style="margin-top: 10px;">
+                <i class="fas fa-redo"></i> Отправить снова
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Контейнер для reCAPTCHA (невидимый) -->
+<div id="recaptcha-container"></div>
 
 <!-- Контекстное меню для сообщений -->
 <div id="messageContextMenu" class="context-menu" style="display: none;">
