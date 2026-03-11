@@ -1,3 +1,17 @@
+// ============= FIREBASE КОНФИГУРАЦИЯ =============
+// ЗАМЕНИТЕ ЭТИ ЗНАЧЕНИЯ НА ВАШИ ИЗ FIREBASE CONSOLE
+const firebaseConfig = {
+    apiKey: "APIKEY", // Вставьте ваш apiKey
+    authDomain: "AUTHDOMAIN", // Вставьте ваш authDomain
+    projectId: "PROJECTID", // Вставьте ваш projectId
+    appId: "APPID" // Вставьте ваш appId
+};
+
+// Инициализация Firebase
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+auth.useDeviceLanguage();
+
 let ws
 let currentUser = null
 let currentChat = null
@@ -55,8 +69,9 @@ function showToast(message, duration = 3000) {
 
 function formatPhone(phone) {
     if (!phone) return 'Нет номера'
-    if (phone.length === 11) {
-        return phone.replace(/(\d{1})(\d{3})(\d{3})(\d{2})(\d{2})/, '+$1 ($2) $3-$4-$5')
+    const cleanNumber = phone.replace('+', '')
+    if (cleanNumber.length === 11) {
+        return cleanNumber.replace(/(\d{1})(\d{3})(\d{3})(\d{2})(\d{2})/, '+$1 ($2) $3-$4-$5')
     }
     return phone
 }
@@ -103,374 +118,303 @@ function closeChat(event) {
     document.getElementById('sidebar').classList.add('open')
 }
 
-// ============= ФУНКЦИИ ДЛЯ СТАТУСОВ =============
+// ============= ФУНКЦИИ ДЛЯ ПРОВЕРКИ ПАРОЛЯ =============
 
-function updateOnlineStatus() {
-    document.querySelectorAll('.chatItem').forEach(item => {
-        const phone = item.id.replace('chat-', '')
-        const statusDot = item.querySelector('.chat-status')
-        if (statusDot) {
-            const isOnline = window.clients && window.clients[phone] === true
-            statusDot.className = `chat-status ${isOnline ? '' : 'offline'}`
-        }
-    })
+function checkPasswordStrength(password) {
+    const strength = {
+        length: password.length >= 6,
+        number: /\d/.test(password),
+        letter: /[a-zA-Z]/.test(password)
+    };
     
-    if (currentChat) {
-        const isOnline = window.clients && window.clients[currentChat] === true
-        document.getElementById('chatUserStatus').textContent = isOnline ? 'online' : 'offline'
-        document.getElementById('chatUserStatus').className = `chat-user-status ${isOnline ? '' : 'offline'}`
+    // Обновляем требования
+    document.getElementById('reqLength').innerHTML = (strength.length ? '✅' : '❌') + ' Минимум 6 символов';
+    document.getElementById('reqNumber').innerHTML = (strength.number ? '✅' : '❌') + ' Хотя бы одна цифра';
+    document.getElementById('reqLetter').innerHTML = (strength.letter ? '✅' : '❌') + ' Хотя бы одна буква';
+    
+    document.getElementById('reqLength').className = 'requirement' + (strength.length ? ' met' : '');
+    document.getElementById('reqNumber').className = 'requirement' + (strength.number ? ' met' : '');
+    document.getElementById('reqLetter').className = 'requirement' + (strength.letter ? ' met' : '');
+    
+    // Определяем общую силу пароля
+    const score = Object.values(strength).filter(Boolean).length;
+    const strengthBar = document.getElementById('strengthBar');
+    
+    strengthBar.className = 'strength-bar';
+    if (score === 3) {
+        strengthBar.classList.add('strong');
+    } else if (score === 2) {
+        strengthBar.classList.add('medium');
+    } else if (score >= 1) {
+        strengthBar.classList.add('weak');
+    }
+    
+    // Активируем кнопку если все требования выполнены
+    document.getElementById('savePasswordBtn').disabled = !(strength.length && strength.number && strength.letter);
+}
+
+// Проверка существования пользователя в системе
+async function checkUserExists(phone) {
+    try {
+        const res = await fetch(`/user/${phone}`);
+        const user = await res.json();
+        return user.username !== null; // Если есть username, значит пользователь уже создавал профиль
+    } catch (error) {
+        console.error("Error checking user:", error);
+        return false;
     }
 }
 
-function broadcastOnlineStatus(isOnline) {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return
+// Сохранение пароля
+async function savePassword() {
+    const password = document.getElementById('newPassword').value;
+    const confirm = document.getElementById('confirmPassword').value;
     
-    const chatElements = document.querySelectorAll('.chatItem')
-    chatElements.forEach(item => {
-        const contactPhone = item.id.replace('chat-', '')
-        ws.send(JSON.stringify({
-            action: 'status',
-            to: contactPhone,
-            online: isOnline
-        }))
-    })
-}
-
-// ============= ФУНКЦИИ ДЛЯ КОНТЕКСТНОГО МЕНЮ =============
-
-function showContextMenu(event, type, data) {
-    event.preventDefault()
-    event.stopPropagation()
-    
-    document.getElementById('messageContextMenu').style.display = 'none'
-    document.getElementById('chatContextMenu').style.display = 'none'
-    
-    let menu
-    let menuId
-    
-    if (type === 'message') {
-        menuId = 'messageContextMenu'
-        selectedMessageId = data.messageId
-        selectedMessageElement = data.element
-    } else if (type === 'chat') {
-        menuId = 'chatContextMenu'
-        selectedChatPhone = data.phone
-        selectedChatElement = data.element
+    if (password !== confirm) {
+        showToast("Пароли не совпадают");
+        return;
     }
-    
-    menu = document.getElementById(menuId)
-    
-    let x, y
-    
-    if (event.touches) {
-        x = event.touches[0].pageX
-        y = event.touches[0].pageY
-        event.preventDefault()
-    } else {
-        x = event.pageX
-        y = event.pageY
-    }
-    
-    menu.style.display = 'block'
-    menu.style.left = x + 'px'
-    menu.style.top = y + 'px'
-    
-    setTimeout(() => {
-        const rect = menu.getBoundingClientRect()
-        if (rect.right > window.innerWidth) {
-            menu.style.left = (window.innerWidth - rect.width - 10) + 'px'
-        }
-        if (rect.bottom > window.innerHeight) {
-            menu.style.top = (window.innerHeight - rect.height - 10) + 'px'
-        }
-    }, 0)
-}
-
-function hideContextMenus() {
-    document.getElementById('messageContextMenu').style.display = 'none'
-    document.getElementById('chatContextMenu').style.display = 'none'
-    selectedMessageId = null
-    selectedMessageElement = null
-    selectedChatPhone = null
-    selectedChatElement = null
-}
-
-document.addEventListener('click', hideContextMenus)
-document.addEventListener('touchstart', hideContextMenus)
-
-document.addEventListener('contextmenu', (e) => {
-    if (hasClass(e.target, 'message') || hasClass(e.target, 'chatItem')) {
-        e.preventDefault();
-    }
-});
-
-document.addEventListener('selectstart', (e) => {
-    if (hasClass(e.target, 'message') || hasClass(e.target, 'chatItem')) {
-        e.preventDefault();
-    }
-});
-
-// ============= ФУНКЦИИ ДЛЯ РАБОТЫ С ЧАТАМИ =============
-
-function removeDuplicateChats() {
-    const chatList = document.getElementById("chatList")
-    const seen = new Set()
-    const duplicates = []
-    
-    const chats = chatList.querySelectorAll('.chatItem')
-    
-    chats.forEach(chat => {
-        const id = chat.id
-        if (seen.has(id)) {
-            duplicates.push(chat)
-        } else {
-            seen.add(id)
-        }
-    })
-    
-    duplicates.forEach(dup => dup.remove())
-    
-    if (duplicates.length > 0) {
-        console.log(`Removed ${duplicates.length} duplicate chats`)
-    }
-}
-
-function createChatElement(chat) {
-    const displayName = chat.displayName || chat.name || chat.username || chat.phone
-    const lastMessage = chat.last || 'Нет сообщений'
-    const unreadCount = unreadCounts[chat.phone] || 0
-    
-    let div = document.createElement("div")
-    div.className = "chatItem"
-    
-    const cleanPhoneValue = cleanPhone(chat.phone)
-    div.id = `chat-${cleanPhoneValue}`
-    
-    if (chat.phone === currentChat) {
-        div.classList.add('active')
-    }
-    
-    let avatarHtml
-    if (chat.avatar) {
-        avatarHtml = `<img src="${chat.avatar}" class="chat-avatar-img" alt="avatar" onerror="this.onerror=null; this.parentElement.innerHTML='<i class=\'fas fa-user\'></i>'">`
-    } else {
-        avatarHtml = '<i class="fas fa-user"></i>'
-    }
-    
-    const isOnline = window.clients && window.clients[chat.phone] === true
-    
-    const unreadBadge = unreadCount > 0 ? 
-        `<span class="unread-badge">${unreadCount > 99 ? '99+' : unreadCount}</span>` : ''
-    
-    div.innerHTML = `
-        <div class="chat-avatar">${avatarHtml}</div>
-        <div class="chat-info">
-            <div class="chat-name">${escapeHtml(displayName)}</div>
-            <div class="chat-last-message">${escapeHtml(lastMessage)}</div>
-        </div>
-        ${unreadBadge}
-        <div class="chat-status ${isOnline ? '' : 'offline'}"></div>
-    `
-    
-    let isLongPress = false
-    
-    div.addEventListener('mousedown', () => {
-        isLongPress = false
-    })
-    
-    div.addEventListener('mouseup', () => {
-        if (!isLongPress) {
-            openChat(chat.phone, displayName)
-        }
-    })
-    
-    div.addEventListener('touchstart', (e) => {
-        isLongPress = false
-        longPressTimer = setTimeout(() => {
-            isLongPress = true
-            if (window.navigator.vibrate) {
-                window.navigator.vibrate(50)
-            }
-            showContextMenu(e, 'chat', { phone: chat.phone, element: div })
-        }, 500)
-    })
-    
-    div.addEventListener('touchend', (e) => {
-        clearTimeout(longPressTimer)
-        if (!isLongPress) {
-            e.preventDefault()
-            openChat(chat.phone, displayName)
-        }
-    })
-    
-    div.addEventListener('touchmove', () => {
-        clearTimeout(longPressTimer)
-        isLongPress = true
-    })
-    
-    div.addEventListener('touchcancel', () => {
-        clearTimeout(longPressTimer)
-    })
-    
-    div.addEventListener('contextmenu', (e) => {
-        e.preventDefault()
-        showContextMenu(e, 'chat', { phone: chat.phone, element: div })
-    })
-    
-    return div
-}
-
-function renderChatList(chats) {
-    let list = document.getElementById("chatList")
-    list.innerHTML = ""
-
-    document.getElementById('chatsCount').textContent = chats.length
-
-    chats.forEach(chat => {
-        const chatElement = createChatElement(chat)
-        list.appendChild(chatElement)
-    })
-}
-
-async function loadChats() {
-    if (!currentUser) return
     
     try {
-        let res = await fetch(`/users/${currentUser}`)
-        if (!res.ok) throw new Error('Failed to load chats')
+        const res = await fetch('/set-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                phone: currentUser,
+                password: btoa(password) // Простое шифрование, в продакшене используйте bcrypt
+            })
+        });
         
-        let chats = await res.json()
+        const data = await res.json();
         
-        chats.forEach(chat => {
-            chatsCache[chat.phone] = chat
-        })
+        if (data.error) {
+            showToast(data.error);
+            return;
+        }
         
-        chats.sort((a, b) => {
-            if (!a.last) return 1
-            if (!b.last) return -1
-            return 0
-        })
-        
-        renderChatList(chats)
-        
-        setTimeout(removeDuplicateChats, 100)
+        showToast("Пароль сохранен");
+        closePasswordSetup();
+        completeLogin();
         
     } catch (error) {
-        console.error("Error loading chats:", error)
-        showToast("Ошибка загрузки чатов")
+        console.error("Error saving password:", error);
+        showToast("Ошибка сохранения пароля");
     }
 }
 
-async function updateSingleChat(phone, moveToTop = false) {
+// Закрыть окно создания пароля
+function closePasswordSetup() {
+    document.getElementById('passwordSetupModal').classList.remove('show');
+}
+
+// Смена пароля
+async function changePassword() {
+    const current = document.getElementById('currentPassword').value;
+    const newPass = document.getElementById('newPasswordChange').value;
+    const confirm = document.getElementById('confirmPasswordChange').value;
+    
+    if (newPass !== confirm) {
+        showToast("Новые пароли не совпадают");
+        return;
+    }
+    
     try {
-        const cleanPhoneValue = cleanPhone(phone)
+        const res = await fetch('/change-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                phone: currentUser,
+                currentPassword: btoa(current),
+                newPassword: btoa(newPass)
+            })
+        });
         
-        const existingElement = document.getElementById(`chat-${cleanPhoneValue}`)
+        const data = await res.json();
         
-        const res = await fetch(`/users/${currentUser}`)
-        if (!res.ok) throw new Error('Failed to load chats')
-        
-        const chats = await res.json()
-        const updatedChat = chats.find(c => cleanPhone(c.phone) === cleanPhoneValue)
-        
-        if (!updatedChat || !updatedChat.last) {
-            return
+        if (data.error) {
+            showToast(data.error);
+            return;
         }
         
-        updatedChat.unread = unreadCounts[phone] || 0
-        chatsCache[phone] = updatedChat
-        
-        const list = document.getElementById("chatList")
-        let chatElement = document.getElementById(`chat-${cleanPhoneValue}`)
-        
-        if (chatElement) {
-            const displayName = updatedChat.displayName || updatedChat.name || updatedChat.username || phone
-            const lastMessage = updatedChat.last || 'Нет сообщений'
-            const unreadCount = unreadCounts[phone] || 0
-            
-            const nameElement = chatElement.querySelector('.chat-name')
-            const lastMessageElement = chatElement.querySelector('.chat-last-message')
-            const avatarElement = chatElement.querySelector('.chat-avatar')
-            const statusDot = chatElement.querySelector('.chat-status')
-            
-            if (nameElement) nameElement.innerText = displayName
-            if (lastMessageElement) lastMessageElement.innerText = lastMessage
-            
-            if (updatedChat.avatar) {
-                avatarElement.innerHTML = `<img src="${updatedChat.avatar}" class="chat-avatar-img" alt="avatar" onerror="this.onerror=null; this.parentElement.innerHTML='<i class=\'fas fa-user\'></i>'">`
-            } else {
-                avatarElement.innerHTML = '<i class="fas fa-user"></i>'
-            }
-            
-            const isOnline = window.clients && window.clients[phone] === true
-            if (statusDot) {
-                statusDot.className = `chat-status ${isOnline ? '' : 'offline'}`
-            }
-            
-            let badge = chatElement.querySelector('.unread-badge')
-            if (unreadCount > 0) {
-                if (!badge) {
-                    badge = document.createElement('span')
-                    badge.className = 'unread-badge'
-                    chatElement.appendChild(badge)
-                }
-                badge.textContent = unreadCount > 99 ? '99+' : unreadCount
-            } else if (badge) {
-                badge.remove()
-            }
-            
-            if (moveToTop) {
-                list.prepend(chatElement)
-            }
-            
-        } else {
-            if (updatedChat.last) {
-                const newChat = createChatElement(updatedChat)
-                if (moveToTop) {
-                    list.prepend(newChat)
-                } else {
-                    list.appendChild(newChat)
-                }
-                
-                const count = document.getElementById("chatsCount")
-                count.textContent = parseInt(count.textContent) + 1
-            }
-        }
-        
-        setTimeout(removeDuplicateChats, 50)
+        showToast("Пароль изменен");
+        closeChangePassword();
         
     } catch (error) {
-        console.error("Error updating single chat:", error)
+        console.error("Error changing password:", error);
+        showToast("Ошибка смены пароля");
     }
 }
 
-// ============= ФУНКЦИИ ДЛЯ АВТОРИЗАЦИИ И ПРОФИЛЯ =============
+function closeChangePassword() {
+    document.getElementById('changePasswordModal').classList.remove('show');
+}
 
-function login() {
-    const phone = document.getElementById("loginPhone").value.trim()
+// ============= ФУНКЦИИ ДЛЯ АВТОРИЗАЦИИ =============
+
+async function login() {
+    const phone = document.getElementById("loginPhone").value.trim();
 
     if (!phone) {
-        showToast("Введите номер телефона")
-        return
+        showToast("Введите номер телефона");
+        return;
     }
 
-    if (phone.length < 10) {
-        showToast("Номер телефона слишком короткий")
-        return
-    }
-
-    currentUser = phone
-
-    document.getElementById("loginScreen").style.display = "none"
-    document.getElementById("app").style.display = "flex"
-    document.getElementById("sidebar").classList.add('open')
-
-    document.getElementById("myPhone").innerText = formatPhone(phone)
+    let cleanPhone = phone.replace(/[^0-9]/g, '');
     
-    loadUserProfile()
-    connect()
-    loadChats()
+    if (!cleanPhone.startsWith('+')) {
+        if (cleanPhone.length === 11 && cleanPhone.startsWith('7')) {
+            cleanPhone = '+' + cleanPhone;
+        } else if (cleanPhone.length === 10) {
+            cleanPhone = '+7' + cleanPhone;
+        } else {
+            cleanPhone = '+' + cleanPhone;
+        }
+    }
+
+    showToast("Отправка кода...");
+
+    try {
+        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+            'size': 'invisible',
+            'callback': (response) => {
+                console.log('reCAPTCHA solved');
+            }
+        });
+
+        const confirmationResult = await auth.signInWithPhoneNumber(
+            cleanPhone, 
+            window.recaptchaVerifier
+        );
+        
+        window.confirmationResult = confirmationResult;
+        document.getElementById('displayPhone').textContent = cleanPhone;
+        showVerificationCodeModal();
+        
+    } catch (error) {
+        console.error("Error sending verification code:", error);
+        
+        if (error.code === 'auth/invalid-phone-number') {
+            showToast("Неверный формат номера");
+        } else if (error.code === 'auth/too-many-requests') {
+            showToast("Слишком много попыток. Попробуйте позже");
+        } else if (error.code === 'auth/quota-exceeded') {
+            showToast("Превышен лимит отправки SMS");
+        } else {
+            showToast("Ошибка отправки кода");
+        }
+    }
 }
+
+async function verifyCode(code) {
+    try {
+        const result = await window.confirmationResult.confirm(code);
+        
+        currentUser = result.user.phoneNumber;
+        closeVerificationModal();
+        
+        // Проверяем, существует ли пользователь
+        const userExists = await checkUserExists(currentUser);
+        
+        if (!userExists) {
+            // Новый пользователь - просим создать пароль
+            showPasswordSetup();
+        } else {
+            // Существующий пользователь - просим ввести пароль
+            showPasswordLogin();
+        }
+        
+    } catch (error) {
+        console.error("Error verifying code:", error);
+        
+        if (error.code === 'auth/invalid-verification-code') {
+            showToast("Неверный код");
+        } else {
+            showToast("Ошибка проверки кода");
+        }
+    }
+}
+
+function showPasswordSetup() {
+    document.getElementById('passwordSetupModal').classList.add('show');
+}
+
+function showPasswordLogin() {
+    // Здесь можно показать модальное окно для ввода пароля
+    // Или использовать prompt для простоты
+    const password = prompt("Введите ваш пароль:");
+    if (password) {
+        verifyPassword(password);
+    }
+}
+
+async function verifyPassword(password) {
+    try {
+        const res = await fetch('/verify-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                phone: currentUser,
+                password: btoa(password)
+            })
+        });
+        
+        const data = await res.json();
+        
+        if (data.error) {
+            showToast("Неверный пароль");
+            showPasswordLogin(); // Пробуем снова
+            return;
+        }
+        
+        completeLogin();
+        
+    } catch (error) {
+        console.error("Error verifying password:", error);
+        showToast("Ошибка проверки пароля");
+    }
+}
+
+function showVerificationCodeModal() {
+    document.getElementById('verificationModal').classList.add('show');
+}
+
+function closeVerificationModal() {
+    document.getElementById('verificationModal').classList.remove('show');
+}
+
+async function submitVerificationCode() {
+    const code = document.getElementById('verificationCode').value.trim();
+    if (code.length === 6) {
+        await verifyCode(code);
+    } else {
+        showToast("Введите 6-значный код");
+    }
+}
+
+async function resendCode() {
+    showToast("Отправка нового кода...");
+    try {
+        await window.confirmationResult.resend();
+        showToast("Код отправлен повторно");
+    } catch (error) {
+        console.error("Error resending code:", error);
+        showToast("Ошибка повторной отправки");
+    }
+}
+
+function completeLogin() {
+    document.getElementById("loginScreen").style.display = "none";
+    document.getElementById("app").style.display = "flex";
+    document.getElementById("sidebar").classList.add('open');
+
+    document.getElementById("myPhone").innerText = formatPhone(currentUser);
+    
+    loadUserProfile();
+    connect();
+    loadChats();
+}
+
+// ============= ФУНКЦИИ ДЛЯ ПРОФИЛЯ =============
 
 async function loadUserProfile() {
     try {
@@ -1362,7 +1306,7 @@ function handleReconnect() {
     }
 }
 
-// ============= ПОИСК С АВТОДОПОЛНЕНИЕМ =============
+// ============= ФУНКЦИИ ДЛЯ ПОИСКА =============
 
 async function searchUsers(query) {
     if (query.length < 2) {
@@ -1386,8 +1330,6 @@ function displaySearchResults(users, query) {
     const resultsDiv = document.getElementById('searchResults')
     
     if (!resultsDiv) return
-    
-    console.log('Search results:', users)
     
     resultsDiv.innerHTML = ''
     
@@ -1419,7 +1361,7 @@ function createSearchResultItem(user, query) {
         avatarHtml = '<i class="fas fa-user"></i>'
     }
     
-    // Используем realPhone для открытия профиля, если он есть
+    // Сохраняем реальный номер для открытия профиля
     const phoneToUse = user.realPhone || user.phone
     
     // Форматируем номер телефона или показываем "Скрыто" с одним замком
@@ -1555,12 +1497,38 @@ async function searchExactUser(username) {
 function openSettings() {
     const modal = document.getElementById('settingsModal')
     loadPrivacySettings()
+    
+    // Добавляем кнопку смены пароля в настройки
+    const settingsSections = document.querySelectorAll('.settings-section')
+    const securitySection = settingsSections[1] // Секция безопасности
+    
+    // Проверяем, нет ли уже кнопки смены пароля
+    if (!document.getElementById('changePasswordInSettings')) {
+        const passwordItem = document.createElement('div')
+        passwordItem.className = 'settings-item'
+        passwordItem.id = 'changePasswordInSettings'
+        passwordItem.innerHTML = `
+            <div class="settings-item-info">
+                <div class="settings-item-title">Пароль</div>
+                <div class="settings-item-description">Изменить пароль для входа</div>
+            </div>
+            <button class="settings-button" onclick="openChangePassword()">
+                <i class="fas fa-key"></i> Сменить
+            </button>
+        `
+        securitySection.insertBefore(passwordItem, securitySection.firstChild)
+    }
+    
     modal.classList.add('show')
 }
 
 function closeSettings() {
-    const modal = document.getElementById('settingsModal')
-    modal.classList.remove('show')
+    document.getElementById('settingsModal').classList.remove('show')
+}
+
+function openChangePassword() {
+    closeSettings()
+    document.getElementById('changePasswordModal').classList.add('show')
 }
 
 async function loadPrivacySettings() {
@@ -1729,6 +1697,9 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
         closeModal()
         closeAvatarEditor()
+        closeVerificationModal()
+        closePasswordSetup()
+        closeChangePassword()
     }
     
     if (document.getElementById('avatarEditorModal').classList.contains('show')) {
@@ -1792,3 +1763,226 @@ window.addEventListener('beforeunload', () => {
 })
 
 setInterval(updateOnlineStatus, 5000)
+
+// Функции для обновления статусов
+function updateOnlineStatus() {
+    document.querySelectorAll('.chatItem').forEach(item => {
+        const phone = item.id.replace('chat-', '')
+        const statusDot = item.querySelector('.chat-status')
+        if (statusDot) {
+            const isOnline = window.clients && window.clients[phone] === true
+            statusDot.className = `chat-status ${isOnline ? '' : 'offline'}`
+        }
+    })
+    
+    if (currentChat) {
+        const isOnline = window.clients && window.clients[currentChat] === true
+        document.getElementById('chatUserStatus').textContent = isOnline ? 'online' : 'offline'
+        document.getElementById('chatUserStatus').className = `chat-user-status ${isOnline ? '' : 'offline'}`
+    }
+}
+
+function broadcastOnlineStatus(isOnline) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    
+    const chatElements = document.querySelectorAll('.chatItem')
+    chatElements.forEach(item => {
+        const contactPhone = item.id.replace('chat-', '')
+        ws.send(JSON.stringify({
+            action: 'status',
+            to: contactPhone,
+            online: isOnline
+        }))
+    })
+}
+
+function removeDuplicateChats() {
+    const chatList = document.getElementById("chatList")
+    const seen = new Set()
+    const duplicates = []
+    
+    const chats = chatList.querySelectorAll('.chatItem')
+    
+    chats.forEach(chat => {
+        const id = chat.id
+        if (seen.has(id)) {
+            duplicates.push(chat)
+        } else {
+            seen.add(id)
+        }
+    })
+    
+    duplicates.forEach(dup => dup.remove())
+    
+    if (duplicates.length > 0) {
+        console.log(`Removed ${duplicates.length} duplicate chats`)
+    }
+}
+
+async function updateSingleChat(phone, moveToTop = false) {
+    try {
+        const cleanPhoneValue = cleanPhone(phone)
+        
+        const existingElement = document.getElementById(`chat-${cleanPhoneValue}`)
+        
+        const res = await fetch(`/users/${currentUser}`)
+        if (!res.ok) throw new Error('Failed to load chats')
+        
+        const chats = await res.json()
+        const updatedChat = chats.find(c => cleanPhone(c.phone) === cleanPhoneValue)
+        
+        if (!updatedChat || !updatedChat.last) {
+            return
+        }
+        
+        updatedChat.unread = unreadCounts[phone] || 0
+        chatsCache[phone] = updatedChat
+        
+        const list = document.getElementById("chatList")
+        let chatElement = document.getElementById(`chat-${cleanPhoneValue}`)
+        
+        if (chatElement) {
+            const displayName = updatedChat.displayName || updatedChat.name || updatedChat.username || phone
+            const lastMessage = updatedChat.last || 'Нет сообщений'
+            const unreadCount = unreadCounts[phone] || 0
+            
+            const nameElement = chatElement.querySelector('.chat-name')
+            const lastMessageElement = chatElement.querySelector('.chat-last-message')
+            const avatarElement = chatElement.querySelector('.chat-avatar')
+            const statusDot = chatElement.querySelector('.chat-status')
+            
+            if (nameElement) nameElement.innerText = displayName
+            if (lastMessageElement) lastMessageElement.innerText = lastMessage
+            
+            if (updatedChat.avatar) {
+                avatarElement.innerHTML = `<img src="${updatedChat.avatar}" class="chat-avatar-img" alt="avatar" onerror="this.onerror=null; this.parentElement.innerHTML='<i class=\'fas fa-user\'></i>'">`
+            } else {
+                avatarElement.innerHTML = '<i class="fas fa-user"></i>'
+            }
+            
+            const isOnline = window.clients && window.clients[phone] === true
+            if (statusDot) {
+                statusDot.className = `chat-status ${isOnline ? '' : 'offline'}`
+            }
+            
+            let badge = chatElement.querySelector('.unread-badge')
+            if (unreadCount > 0) {
+                if (!badge) {
+                    badge = document.createElement('span')
+                    badge.className = 'unread-badge'
+                    chatElement.appendChild(badge)
+                }
+                badge.textContent = unreadCount > 99 ? '99+' : unreadCount
+            } else if (badge) {
+                badge.remove()
+            }
+            
+            if (moveToTop) {
+                list.prepend(chatElement)
+            }
+            
+        } else {
+            if (updatedChat.last) {
+                const newChat = createChatElement(updatedChat)
+                if (moveToTop) {
+                    list.prepend(newChat)
+                } else {
+                    list.appendChild(newChat)
+                }
+                
+                const count = document.getElementById("chatsCount")
+                count.textContent = parseInt(count.textContent) + 1
+            }
+        }
+        
+        setTimeout(removeDuplicateChats, 50)
+        
+    } catch (error) {
+        console.error("Error updating single chat:", error)
+    }
+}
+
+function createChatElement(chat) {
+    const displayName = chat.displayName || chat.name || chat.username || chat.phone
+    const lastMessage = chat.last || 'Нет сообщений'
+    const unreadCount = unreadCounts[chat.phone] || 0
+    
+    let div = document.createElement("div")
+    div.className = "chatItem"
+    
+    const cleanPhoneValue = cleanPhone(chat.phone)
+    div.id = `chat-${cleanPhoneValue}`
+    
+    if (chat.phone === currentChat) {
+        div.classList.add('active')
+    }
+    
+    let avatarHtml
+    if (chat.avatar) {
+        avatarHtml = `<img src="${chat.avatar}" class="chat-avatar-img" alt="avatar" onerror="this.onerror=null; this.parentElement.innerHTML='<i class=\'fas fa-user\'></i>'">`
+    } else {
+        avatarHtml = '<i class="fas fa-user"></i>'
+    }
+    
+    const isOnline = window.clients && window.clients[chat.phone] === true
+    
+    const unreadBadge = unreadCount > 0 ? 
+        `<span class="unread-badge">${unreadCount > 99 ? '99+' : unreadCount}</span>` : ''
+    
+    div.innerHTML = `
+        <div class="chat-avatar">${avatarHtml}</div>
+        <div class="chat-info">
+            <div class="chat-name">${escapeHtml(displayName)}</div>
+            <div class="chat-last-message">${escapeHtml(lastMessage)}</div>
+        </div>
+        ${unreadBadge}
+        <div class="chat-status ${isOnline ? '' : 'offline'}"></div>
+    `
+    
+    let isLongPress = false
+    
+    div.addEventListener('mousedown', () => {
+        isLongPress = false
+    })
+    
+    div.addEventListener('mouseup', () => {
+        if (!isLongPress) {
+            openChat(chat.phone, displayName)
+        }
+    })
+    
+    div.addEventListener('touchstart', (e) => {
+        isLongPress = false
+        longPressTimer = setTimeout(() => {
+            isLongPress = true
+            if (window.navigator.vibrate) {
+                window.navigator.vibrate(50)
+            }
+            showContextMenu(e, 'chat', { phone: chat.phone, element: div })
+        }, 500)
+    })
+    
+    div.addEventListener('touchend', (e) => {
+        clearTimeout(longPressTimer)
+        if (!isLongPress) {
+            e.preventDefault()
+            openChat(chat.phone, displayName)
+        }
+    })
+    
+    div.addEventListener('touchmove', () => {
+        clearTimeout(longPressTimer)
+        isLongPress = true
+    })
+    
+    div.addEventListener('touchcancel', () => {
+        clearTimeout(longPressTimer)
+    })
+    
+    div.addEventListener('contextmenu', (e) => {
+        e.preventDefault()
+        showContextMenu(e, 'chat', { phone: chat.phone, element: div })
+    })
+    
+    return div
+}
