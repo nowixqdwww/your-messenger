@@ -1809,3 +1809,35 @@ body {
 .fas, .far, .fab {
     pointer-events: none;
 }
+
+/* Стили для модального окна подтверждения */
+#verificationModal .modal-body {
+    text-align: center;
+}
+
+#verificationModal p {
+    margin: 20px 0;
+    color: #666;
+}
+
+#verificationModal #displayPhone {
+    color: #667eea;
+    font-size: 18px;
+}
+
+#verificationModal .login-input {
+    text-align: center;
+    font-size: 24px;
+    letter-spacing: 8px;
+    margin: 20px 0;
+}
+
+#verificationModal .cancel-profile-btn {
+    width: 100%;
+    background: #f0f0f0;
+    color: #666;
+}
+
+#verificationModal .cancel-profile-btn:hover {
+    background: #e0e0e0;
+}
