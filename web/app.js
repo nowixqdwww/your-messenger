@@ -1408,15 +1408,20 @@ function createSearchResultItem(user, query) {
     if (user.avatar) {
         avatarHtml = `<img src="${user.avatar}" alt="avatar">`
     } else {
-        avatarHtml = getAvatarLetter(user.displayName || user.username || user.phone)
+        avatarHtml = getAvatarLetter(user.displayName || user.username || '')
     }
+    
+    // Форматируем номер телефона или показываем "Скрыто"
+    const phoneDisplay = user.phone_hidden 
+        ? '<span class="search-result-phone hidden">🔒 Скрыто</span>' 
+        : `<span class="search-result-phone">${formatPhone(user.phone)}</span>`
     
     div.innerHTML = `
         <div class="search-result-avatar">${avatarHtml}</div>
         <div class="search-result-info">
-            <div class="search-result-name">${highlightedName || user.displayName || user.phone}</div>
+            <div class="search-result-name">${highlightedName || user.displayName}</div>
             <div class="search-result-username">${highlightedUsername || ''}</div>
-            <div class="search-result-phone">${formatPhone(user.phone)}</div>
+            ${phoneDisplay}
         </div>
     `
     
@@ -1760,3 +1765,4 @@ window.addEventListener('beforeunload', () => {
 })
 
 setInterval(updateOnlineStatus, 5000)
+
