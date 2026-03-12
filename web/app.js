@@ -139,11 +139,15 @@ function broadcastOnlineStatus(isOnline) {
 // ============= ФУНКЦИИ ДЛЯ ПРОВЕРКИ ПАРОЛЯ =============
 
 function checkPasswordStrength(password) {
+    console.log('Checking password strength:', password); // Для отладки
+    
     const strength = {
         length: password.length >= 6,
         number: /\d/.test(password),
         letter: /[a-zA-Z]/.test(password)
     };
+    
+    console.log('Strength:', strength); // Для отладки
     
     // Обновляем требования
     const reqLength = document.getElementById('reqLength');
@@ -152,16 +156,19 @@ function checkPasswordStrength(password) {
     const strengthBar = document.getElementById('strengthBar');
     const saveBtn = document.getElementById('savePasswordBtn');
     
+    // Обновляем требование длины
     if (reqLength) {
         reqLength.innerHTML = (strength.length ? '✅' : '❌') + ' Минимум 6 символов';
         reqLength.className = 'requirement' + (strength.length ? ' met' : '');
     }
     
+    // Обновляем требование цифры
     if (reqNumber) {
         reqNumber.innerHTML = (strength.number ? '✅' : '❌') + ' Хотя бы одна цифра';
         reqNumber.className = 'requirement' + (strength.number ? ' met' : '');
     }
     
+    // Обновляем требование буквы
     if (reqLetter) {
         reqLetter.innerHTML = (strength.letter ? '✅' : '❌') + ' Хотя бы одна буква';
         reqLetter.className = 'requirement' + (strength.letter ? ' met' : '');
@@ -169,22 +176,30 @@ function checkPasswordStrength(password) {
     
     // Определяем общую силу пароля
     const score = Object.values(strength).filter(Boolean).length;
+    console.log('Score:', score); // Для отладки
     
+    // Обновляем шкалу надежности
     if (strengthBar) {
+        // Сначала убираем все классы
         strengthBar.className = 'strength-bar';
+        
+        // Добавляем класс в зависимости от силы
         if (score === 3) {
             strengthBar.classList.add('strong');
+            console.log('Strong password');
         } else if (score === 2) {
             strengthBar.classList.add('medium');
+            console.log('Medium password');
         } else if (score >= 1) {
             strengthBar.classList.add('weak');
+            console.log('Weak password');
         }
     }
     
     // Активируем кнопку если все требования выполнены
     if (saveBtn) {
         saveBtn.disabled = !(strength.length && strength.number && strength.letter);
-        console.log('Button disabled:', saveBtn.disabled); // Для отладки
+        console.log('Button disabled:', saveBtn.disabled);
     }
 }
 
@@ -1658,6 +1673,7 @@ window.addEventListener('beforeunload', () => {
 
 // Периодическое обновление статусов
 setInterval(updateOnlineStatus, 5000)
+
 
 
 
