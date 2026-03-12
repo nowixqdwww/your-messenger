@@ -5,9 +5,8 @@ from fastapi.responses import FileResponse, JSONResponse
 import os
 import logging
 import shutil
-import sqlite3
+import asyncpg
 import hashlib
-import secrets
 from datetime import datetime
 from pydantic import BaseModel
 import uvicorn
@@ -34,13 +33,17 @@ os.makedirs(AVATAR_DIR, exist_ok=True)
 # Монтируем папку с аватарками
 app.mount("/avatars", StaticFiles(directory=AVATAR_DIR), name="avatars")
 
-# База данных
-DB_PATH = os.path.join(os.path.dirname(__file__), "messenger.db")
+# Подключение к PostgreSQL
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/messenger")
 
-def get_db():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
+async def get_db():
+    conn = await asyncpg.connect(DATABASE_URL)
     return conn
+
+# Функция для создания безопасного имени файла
+def create_safe_filename(phone: str, extension: str) -> str:
+    phone_hash = hashlib.md5(phone.encode()).hexdigest()[:16]
+    return f"avatar_{phone_hash}{extension}"
 
 # Функция для хеширования пароля
 def hash_password(password):
@@ -49,53 +52,80 @@ def hash_password(password):
     return hashlib.sha256((password + salt).encode()).hexdigest()
 
 # Инициализация базы данных
-def init_db():
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    # Таблица пользователей с полем password
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        phone TEXT PRIMARY KEY,
-        username TEXT UNIQUE,
-        name TEXT,
-        bio TEXT,
-        avatar TEXT,
-        password TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    """)
-    
-    # Таблица настроек конфиденциальности
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS privacy_settings (
-        phone TEXT PRIMARY KEY,
-        phone_privacy TEXT DEFAULT 'everyone',
-        online_privacy TEXT DEFAULT 'everyone',
-        avatar_privacy TEXT DEFAULT 'everyone'
-    )
-    """)
-    
-    # Таблица сообщений
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        sender TEXT,
-        receiver TEXT,
-        text TEXT,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        is_deleted INTEGER DEFAULT 0,
-        is_read INTEGER DEFAULT 0
-    )
-    """)
-    
-    conn.commit()
-    conn.close()
-    logger.info("Database initialized")
+async def init_db():
+    conn = await get_db()
+    try:
+        # Проверяем, существует ли таблица users
+        table_exists = await conn.fetchval("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'users'
+            )
+        """)
+        
+        if not table_exists:
+            # Создаем таблицу с паролем
+            await conn.execute("""
+                CREATE TABLE users (
+                    phone TEXT PRIMARY KEY,
+                    username TEXT UNIQUE,
+                    name TEXT,
+                    bio TEXT,
+                    avatar TEXT,
+                    password TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            logger.info("Created users table with password column")
+        else:
+            # Проверяем, есть ли колонка password
+            column_exists = await conn.fetchval("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.columns 
+                    WHERE table_name = 'users' AND column_name = 'password'
+                )
+            """)
+            
+            if not column_exists:
+                # Добавляем колонку password
+                await conn.execute("ALTER TABLE users ADD COLUMN password TEXT")
+                logger.info("Added password column to users table")
+        
+        # Таблица настроек конфиденциальности
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS privacy_settings (
+                phone TEXT PRIMARY KEY,
+                phone_privacy TEXT DEFAULT 'everyone',
+                online_privacy TEXT DEFAULT 'everyone',
+                avatar_privacy TEXT DEFAULT 'everyone',
+                FOREIGN KEY (phone) REFERENCES users(phone) ON DELETE CASCADE
+            )
+        """)
+        
+        # Таблица сообщений
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id SERIAL PRIMARY KEY,
+                sender TEXT NOT NULL,
+                receiver TEXT NOT NULL,
+                text TEXT NOT NULL,
+                is_deleted INTEGER DEFAULT 0,
+                is_read INTEGER DEFAULT 0,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.error(f"Error initializing database: {e}")
+    finally:
+        await conn.close()
 
-init_db()
+# Запускаем инициализацию при старте
+@app.on_event("startup")
+async def startup():
+    await init_db()
 
-# Хранилище активных WebSocket соединений
 clients = {}
 
 # ============= МОДЕЛИ =============
@@ -138,39 +168,42 @@ class DeleteMessage(BaseModel):
 async def register(user: UserRegister):
     """Регистрация нового пользователя"""
     try:
-        conn = get_db()
-        cursor = conn.cursor()
+        conn = await get_db()
         
         # Проверяем, существует ли пользователь
-        cursor.execute("SELECT phone FROM users WHERE phone = ?", (user.phone,))
-        if cursor.fetchone():
-            conn.close()
+        existing = await conn.fetchval(
+            "SELECT phone FROM users WHERE phone = $1",
+            user.phone
+        )
+        if existing:
+            await conn.close()
             return JSONResponse(status_code=400, content={"error": "Пользователь уже существует"})
         
         # Проверяем уникальность username
         if user.username:
-            cursor.execute("SELECT phone FROM users WHERE username = ?", (user.username,))
-            if cursor.fetchone():
-                conn.close()
+            existing_username = await conn.fetchval(
+                "SELECT phone FROM users WHERE username = $1",
+                user.username
+            )
+            if existing_username:
+                await conn.close()
                 return JSONResponse(status_code=400, content={"error": "Username уже занят"})
         
         # Хешируем пароль
         hashed_password = hash_password(user.password)
         
         # Создаем пользователя
-        cursor.execute(
-            "INSERT INTO users (phone, username, name, password) VALUES (?, ?, ?, ?)",
-            (user.phone, user.username, user.name, hashed_password)
-        )
+        await conn.execute("""
+            INSERT INTO users (phone, username, name, password) 
+            VALUES ($1, $2, $3, $4)
+        """, user.phone, user.username, user.name, hashed_password)
         
         # Создаем настройки приватности
-        cursor.execute(
-            "INSERT INTO privacy_settings (phone) VALUES (?)",
-            (user.phone,)
-        )
+        await conn.execute("""
+            INSERT INTO privacy_settings (phone) VALUES ($1)
+        """, user.phone)
         
-        conn.commit()
-        conn.close()
+        await conn.close()
         
         logger.info(f"New user registered: {user.phone}")
         return {"ok": True, "phone": user.phone}
@@ -183,57 +216,59 @@ async def register(user: UserRegister):
 async def login(data: UserLogin):
     """Вход по номеру и паролю"""
     try:
-        conn = get_db()
-        cursor = conn.cursor()
+        conn = await get_db()
         
-        cursor.execute(
-            "SELECT phone, password FROM users WHERE phone = ?",
-            (data.phone,)
+        # Получаем пользователя
+        user = await conn.fetchrow(
+            "SELECT phone, password FROM users WHERE phone = $1",
+            data.phone
         )
-        user = cursor.fetchone()
-        conn.close()
+        
+        await conn.close()
         
         if not user:
-            return JSONResponse(status_code=401, content={"error": "Неверный номер или пароль"})
+            return JSONResponse(status_code=404, content={"error": "Пользователь не найден"})
         
+        # Проверяем, есть ли пароль
+        if user['password'] is None:
+            return JSONResponse(status_code=401, content={"error": "NO_PASSWORD_SET"})
+        
+        # Проверяем пароль
         if user['password'] != hash_password(data.password):
-            return JSONResponse(status_code=401, content={"error": "Неверный номер или пароль"})
+            return JSONResponse(status_code=401, content={"error": "Неверный пароль"})
         
         return {"ok": True, "phone": user['phone']}
         
     except Exception as e:
-        logger.error(f"Error logging in: {e}")
+        logger.error(f"Error in /auth/login: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.post("/auth/change-password")
 async def change_password(data: ChangePassword):
     """Смена пароля"""
     try:
-        conn = get_db()
-        cursor = conn.cursor()
+        conn = await get_db()
         
-        cursor.execute(
-            "SELECT password FROM users WHERE phone = ?",
-            (data.phone,)
+        user = await conn.fetchrow(
+            "SELECT password FROM users WHERE phone = $1",
+            data.phone
         )
-        user = cursor.fetchone()
         
         if not user:
-            conn.close()
+            await conn.close()
             return JSONResponse(status_code=404, content={"error": "Пользователь не найден"})
         
         if user['password'] != hash_password(data.current_password):
-            conn.close()
+            await conn.close()
             return JSONResponse(status_code=401, content={"error": "Неверный текущий пароль"})
         
         hashed = hash_password(data.new_password)
-        cursor.execute(
-            "UPDATE users SET password = ? WHERE phone = ?",
-            (hashed, data.phone)
+        await conn.execute(
+            "UPDATE users SET password = $1 WHERE phone = $2",
+            hashed, data.phone
         )
         
-        conn.commit()
-        conn.close()
+        await conn.close()
         
         logger.info(f"Password changed for user: {data.phone}")
         return {"ok": True}
@@ -246,20 +281,16 @@ async def change_password(data: ChangePassword):
 async def check_password(phone: str):
     """Проверка, установлен ли пароль у пользователя"""
     try:
-        conn = get_db()
-        cursor = conn.cursor()
+        conn = await get_db()
         
-        cursor.execute(
-            "SELECT password FROM users WHERE phone = ?",
-            (phone,)
+        password = await conn.fetchval(
+            "SELECT password FROM users WHERE phone = $1",
+            phone
         )
-        user = cursor.fetchone()
-        conn.close()
         
-        if not user:
-            return JSONResponse(status_code=404, content={"error": "User not found"})
+        await conn.close()
         
-        return {"hasPassword": user['password'] is not None}
+        return {"hasPassword": password is not None}
         
     except Exception as e:
         logger.error(f"Error checking password: {e}")
@@ -271,15 +302,14 @@ async def check_password(phone: str):
 async def get_user(phone: str):
     """Получение информации о пользователе"""
     try:
-        conn = get_db()
-        cursor = conn.cursor()
+        conn = await get_db()
         
-        cursor.execute(
-            "SELECT phone, username, name, bio, avatar FROM users WHERE phone = ?",
-            (phone,)
+        user = await conn.fetchrow(
+            "SELECT phone, username, name, bio, avatar FROM users WHERE phone = $1",
+            phone
         )
-        user = cursor.fetchone()
-        conn.close()
+        
+        await conn.close()
         
         if not user:
             return JSONResponse(status_code=404, content={"error": "User not found"})
@@ -300,17 +330,16 @@ async def get_user(phone: str):
 async def update_user(phone: str, data: UpdateProfile):
     """Обновление профиля пользователя"""
     try:
-        conn = get_db()
-        cursor = conn.cursor()
+        conn = await get_db()
         
         # Проверяем уникальность username
         if data.username:
-            cursor.execute(
-                "SELECT phone FROM users WHERE username = ? AND phone != ?",
-                (data.username, phone)
+            existing = await conn.fetchval(
+                "SELECT phone FROM users WHERE username = $1 AND phone != $2",
+                data.username, phone
             )
-            if cursor.fetchone():
-                conn.close()
+            if existing:
+                await conn.close()
                 return JSONResponse(status_code=400, content={"error": "Username already taken"})
         
         # Обновляем поля
@@ -318,22 +347,21 @@ async def update_user(phone: str, data: UpdateProfile):
         values = []
         
         if data.username is not None:
-            updates.append("username = ?")
+            updates.append("username = $" + str(len(values) + 1))
             values.append(data.username)
         if data.name is not None:
-            updates.append("name = ?")
+            updates.append("name = $" + str(len(values) + 1))
             values.append(data.name)
         if data.bio is not None:
-            updates.append("bio = ?")
+            updates.append("bio = $" + str(len(values) + 1))
             values.append(data.bio)
         
         if updates:
-            query = f"UPDATE users SET {', '.join(updates)} WHERE phone = ?"
+            query = f"UPDATE users SET {', '.join(updates)} WHERE phone = ${len(values) + 1}"
             values.append(phone)
-            cursor.execute(query, values)
+            await conn.execute(query, *values)
         
-        conn.commit()
-        conn.close()
+        await conn.close()
         
         return {"ok": True}
         
@@ -356,16 +384,18 @@ async def upload_avatar(phone: str, file: UploadFile = File(...)):
         
         # Создаем имя файла
         file_extension = os.path.splitext(file.filename)[1]
-        filename = f"{phone}{file_extension}"
+        filename = create_safe_filename(phone, file_extension)
         file_path = os.path.join(AVATAR_DIR, filename)
         
         # Удаляем старый аватар
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("SELECT avatar FROM users WHERE phone = ?", (phone,))
-        old = cursor.fetchone()
-        if old and old['avatar']:
-            old_path = os.path.join(AVATAR_DIR, old['avatar'])
+        conn = await get_db()
+        
+        old = await conn.fetchval(
+            "SELECT avatar FROM users WHERE phone = $1",
+            phone
+        )
+        if old:
+            old_path = os.path.join(AVATAR_DIR, old)
             if os.path.exists(old_path):
                 os.remove(old_path)
         
@@ -373,12 +403,11 @@ async def upload_avatar(phone: str, file: UploadFile = File(...)):
         with open(file_path, "wb") as buffer:
             buffer.write(content)
         
-        cursor.execute(
-            "UPDATE users SET avatar = ? WHERE phone = ?",
-            (filename, phone)
+        await conn.execute(
+            "UPDATE users SET avatar = $1 WHERE phone = $2",
+            filename, phone
         )
-        conn.commit()
-        conn.close()
+        await conn.close()
         
         return {"avatar": f"/avatars/{filename}"}
         
@@ -390,23 +419,23 @@ async def upload_avatar(phone: str, file: UploadFile = File(...)):
 async def remove_avatar(phone: str):
     """Удаление аватара"""
     try:
-        conn = get_db()
-        cursor = conn.cursor()
+        conn = await get_db()
         
-        cursor.execute("SELECT avatar FROM users WHERE phone = ?", (phone,))
-        result = cursor.fetchone()
+        avatar = await conn.fetchval(
+            "SELECT avatar FROM users WHERE phone = $1",
+            phone
+        )
         
-        if result and result['avatar']:
-            file_path = os.path.join(AVATAR_DIR, result['avatar'])
+        if avatar:
+            file_path = os.path.join(AVATAR_DIR, avatar)
             if os.path.exists(file_path):
                 os.remove(file_path)
         
-        cursor.execute(
-            "UPDATE users SET avatar = NULL WHERE phone = ?",
-            (phone,)
+        await conn.execute(
+            "UPDATE users SET avatar = NULL WHERE phone = $1",
+            phone
         )
-        conn.commit()
-        conn.close()
+        await conn.close()
         
         return {"ok": True}
         
@@ -420,15 +449,14 @@ async def remove_avatar(phone: str):
 async def search_user(data: SearchUser):
     """Поиск пользователя по точному username"""
     try:
-        conn = get_db()
-        cursor = conn.cursor()
+        conn = await get_db()
         
-        cursor.execute(
-            "SELECT phone, username, name, bio, avatar FROM users WHERE username = ?",
-            (data.username,)
+        user = await conn.fetchrow(
+            "SELECT phone, username, name, bio, avatar FROM users WHERE username = $1",
+            data.username
         )
-        user = cursor.fetchone()
-        conn.close()
+        
+        await conn.close()
         
         if not user:
             return {"found": False}
@@ -453,24 +481,22 @@ async def search_users(query: str):
         if len(query) < 2:
             return {"users": []}
         
-        conn = get_db()
-        cursor = conn.cursor()
+        conn = await get_db()
         
-        cursor.execute("""
+        users = await conn.fetch("""
             SELECT phone, username, name, avatar 
             FROM users 
-            WHERE username LIKE ? OR name LIKE ?
+            WHERE username ILIKE $1 OR name ILIKE $1
             ORDER BY 
                 CASE 
-                    WHEN username LIKE ? THEN 1
-                    WHEN username LIKE ? THEN 2
+                    WHEN username ILIKE $2 THEN 1
+                    WHEN username ILIKE $3 THEN 2
                     ELSE 3
                 END
             LIMIT 10
-        """, (f'%{query}%', f'%{query}%', f'{query}%', f'%{query}'))
+        """, f'%{query}%', f'{query}%', f'%{query}')
         
-        users = cursor.fetchall()
-        conn.close()
+        await conn.close()
         
         result = []
         for user in users:
@@ -494,48 +520,42 @@ async def search_users(query: str):
 async def get_users(me: str):
     """Получение списка чатов пользователя"""
     try:
-        conn = get_db()
-        cursor = conn.cursor()
+        conn = await get_db()
         
         # Находим всех собеседников
-        cursor.execute("""
+        contacts = await conn.fetch("""
             SELECT DISTINCT
-                CASE WHEN sender = ? THEN receiver ELSE sender END as contact
+                CASE WHEN sender = $1 THEN receiver ELSE sender END as contact
             FROM messages
-            WHERE sender = ? OR receiver = ?
-        """, (me, me, me))
+            WHERE sender = $1 OR receiver = $1
+        """, me)
         
-        contacts = cursor.fetchall()
         result = []
-        
         for contact in contacts:
             phone = contact['contact']
             
             # Информация о собеседнике
-            cursor.execute(
-                "SELECT phone, username, name, avatar FROM users WHERE phone = ?",
-                (phone,)
+            user_data = await conn.fetchrow(
+                "SELECT phone, username, name, avatar FROM users WHERE phone = $1",
+                phone
             )
-            user_data = cursor.fetchone()
             
             if not user_data:
                 continue
             
             # Последнее сообщение
-            cursor.execute("""
+            last_msg = await conn.fetchrow("""
                 SELECT text FROM messages 
-                WHERE (sender = ? AND receiver = ?) OR (sender = ? AND receiver = ?)
+                WHERE (sender = $1 AND receiver = $2) OR (sender = $2 AND receiver = $1)
                 AND is_deleted = 0
                 ORDER BY timestamp DESC LIMIT 1
-            """, (me, phone, phone, me))
-            last_msg = cursor.fetchone()
+            """, me, phone)
             
             # Количество непрочитанных
-            cursor.execute("""
+            unread = await conn.fetchval("""
                 SELECT COUNT(*) FROM messages
-                WHERE sender = ? AND receiver = ? AND is_read = 0
-            """, (phone, me))
-            unread = cursor.fetchone()[0]
+                WHERE sender = $1 AND receiver = $2 AND is_read = 0
+            """, phone, me)
             
             display_name = user_data['name'] or user_data['username'] or phone
             
@@ -547,10 +567,10 @@ async def get_users(me: str):
                 "avatar": f"/avatars/{user_data['avatar']}" if user_data['avatar'] else None,
                 "online": phone in clients,
                 "last": last_msg['text'] if last_msg else None,
-                "unread": unread
+                "unread": unread or 0
             })
         
-        conn.close()
+        await conn.close()
         return result
         
     except Exception as e:
@@ -561,26 +581,23 @@ async def get_users(me: str):
 async def get_messages(user1: str, user2: str):
     """Получение истории сообщений между двумя пользователями"""
     try:
-        conn = get_db()
-        cursor = conn.cursor()
+        conn = await get_db()
         
         # Отмечаем как прочитанные
-        cursor.execute("""
+        await conn.execute("""
             UPDATE messages SET is_read = 1 
-            WHERE sender = ? AND receiver = ?
-        """, (user2, user1))
+            WHERE sender = $1 AND receiver = $2
+        """, user2, user1)
         
         # Получаем сообщения
-        cursor.execute("""
+        messages = await conn.fetch("""
             SELECT id, sender, text, timestamp FROM messages
-            WHERE (sender = ? AND receiver = ?) OR (sender = ? AND receiver = ?)
+            WHERE (sender = $1 AND receiver = $2) OR (sender = $2 AND receiver = $1)
             AND is_deleted = 0
             ORDER BY timestamp
-        """, (user1, user2, user2, user1))
+        """, user1, user2)
         
-        messages = cursor.fetchall()
-        conn.commit()
-        conn.close()
+        await conn.close()
         
         return [[m['id'], m['sender'], m['text']] for m in messages]
         
@@ -592,30 +609,28 @@ async def get_messages(user1: str, user2: str):
 async def delete_message(message_id: int, user: str):
     """Удаление сообщения"""
     try:
-        conn = get_db()
-        cursor = conn.cursor()
+        conn = await get_db()
         
         # Проверяем, что пользователь - автор
-        cursor.execute(
-            "SELECT sender FROM messages WHERE id = ?",
-            (message_id,)
+        sender = await conn.fetchval(
+            "SELECT sender FROM messages WHERE id = $1",
+            message_id
         )
-        msg = cursor.fetchone()
         
-        if not msg:
-            conn.close()
+        if not sender:
+            await conn.close()
             return JSONResponse(status_code=404, content={"error": "Message not found"})
         
-        if msg['sender'] != user:
-            conn.close()
+        if sender != user:
+            await conn.close()
             return JSONResponse(status_code=403, content={"error": "Not authorized"})
         
-        cursor.execute(
-            "UPDATE messages SET is_deleted = 1 WHERE id = ?",
-            (message_id,)
+        await conn.execute(
+            "UPDATE messages SET is_deleted = 1 WHERE id = $1",
+            message_id
         )
-        conn.commit()
-        conn.close()
+        
+        await conn.close()
         
         return {"ok": True}
         
@@ -627,16 +642,14 @@ async def delete_message(message_id: int, user: str):
 async def delete_chat(user1: str, user2: str):
     """Удаление чата (всех сообщений между пользователями)"""
     try:
-        conn = get_db()
-        cursor = conn.cursor()
+        conn = await get_db()
         
-        cursor.execute("""
+        await conn.execute("""
             DELETE FROM messages 
-            WHERE (sender = ? AND receiver = ?) OR (sender = ? AND receiver = ?)
-        """, (user1, user2, user2, user1))
+            WHERE (sender = $1 AND receiver = $2) OR (sender = $2 AND receiver = $1)
+        """, user1, user2)
         
-        conn.commit()
-        conn.close()
+        await conn.close()
         
         return {"ok": True}
         
@@ -650,15 +663,14 @@ async def delete_chat(user1: str, user2: str):
 async def get_privacy_settings(phone: str):
     """Получение настроек приватности"""
     try:
-        conn = get_db()
-        cursor = conn.cursor()
+        conn = await get_db()
         
-        cursor.execute(
-            "SELECT phone_privacy, online_privacy, avatar_privacy FROM privacy_settings WHERE phone = ?",
-            (phone,)
+        settings = await conn.fetchrow(
+            "SELECT phone_privacy, online_privacy, avatar_privacy FROM privacy_settings WHERE phone = $1",
+            phone
         )
-        settings = cursor.fetchone()
-        conn.close()
+        
+        await conn.close()
         
         if settings:
             return {
@@ -681,20 +693,16 @@ async def get_privacy_settings(phone: str):
 async def save_privacy_settings(phone: str, settings: PrivacySettings):
     """Сохранение настроек приватности"""
     try:
-        conn = get_db()
-        cursor = conn.cursor()
+        conn = await get_db()
         
-        cursor.execute("""
+        await conn.execute("""
             INSERT INTO privacy_settings (phone, phone_privacy, online_privacy, avatar_privacy)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(phone) DO UPDATE SET
-                phone_privacy = excluded.phone_privacy,
-                online_privacy = excluded.online_privacy,
-                avatar_privacy = excluded.avatar_privacy
-        """, (phone, settings.phone_privacy, settings.online_privacy, settings.avatar_privacy))
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (phone) DO UPDATE
+            SET phone_privacy = $2, online_privacy = $3, avatar_privacy = $4
+        """, phone, settings.phone_privacy, settings.online_privacy, settings.avatar_privacy)
         
-        conn.commit()
-        conn.close()
+        await conn.close()
         
         return {"ok": True}
         
@@ -728,15 +736,12 @@ async def websocket_endpoint(ws: WebSocket, user: str):
                     continue
 
                 # Сохраняем в БД
-                conn = get_db()
-                cursor = conn.cursor()
-                cursor.execute(
-                    "INSERT INTO messages (sender, receiver, text) VALUES (?, ?, ?)",
-                    (user, to, text)
-                )
-                message_id = cursor.lastrowid
-                conn.commit()
-                conn.close()
+                conn = await get_db()
+                message_id = await conn.fetchval("""
+                    INSERT INTO messages (sender, receiver, text) 
+                    VALUES ($1, $2, $3) RETURNING id
+                """, user, to, text)
+                await conn.close()
 
                 # Отправляем получателю
                 if to in clients:
@@ -809,6 +814,5 @@ if __name__ == "__main__":
         "main:app",
         host="0.0.0.0",
         port=port,
-        reload=True
+        reload=False
     )
-
