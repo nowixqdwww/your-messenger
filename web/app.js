@@ -24,6 +24,17 @@ let searchTimeout = null
 let cropper = null
 let currentAvatarFile = null
 
+// Для эмодзи и стикеров
+let emojiPicker = null
+let userStickers = []
+let popularStickers = [
+    '/stickers/popular/1.png',
+    '/stickers/popular/2.png',
+    '/stickers/popular/3.png',
+    '/stickers/popular/4.png',
+    '/stickers/popular/5.png'
+]
+
 // Глобальный объект для хранения онлайн статусов
 window.clients = {}
 
@@ -36,11 +47,6 @@ let unreadCounts = {}
 function cleanPhone(phone) {
     if (!phone) return ''
     return phone.toString().replace(/\s+/g, '').trim()
-}
-
-function chatExists(phone) {
-    const cleanPhoneValue = cleanPhone(phone)
-    return document.getElementById(`chat-${cleanPhoneValue}`) !== null
 }
 
 function showToast(message, duration = 3000) {
@@ -63,14 +69,14 @@ function formatPhone(phone) {
 }
 
 function getAvatarLetter(name) {
-    if (!name) return '<i class="fas fa-user"></i>'
+    if (!name) return '?'
     if (name.startsWith('@') && name.length > 1) {
         return name[1].toUpperCase()
     }
     if (name.length > 0) {
         return name[0].toUpperCase()
     }
-    return '<i class="fas fa-user"></i>'
+    return '?'
 }
 
 function escapeHtml(text) {
@@ -80,15 +86,15 @@ function escapeHtml(text) {
 }
 
 function hasClass(element, className) {
-    if (!element) return false;
-    let current = element;
+    if (!element) return false
+    let current = element
     while (current) {
         if (current.classList && current.classList.contains(className)) {
-            return true;
+            return true
         }
-        current = current.parentElement;
+        current = current.parentElement
     }
-    return false;
+    return false
 }
 
 function toggleSidebar() {
@@ -139,17 +145,12 @@ function broadcastOnlineStatus(isOnline) {
 // ============= ФУНКЦИИ ДЛЯ ПРОВЕРКИ ПАРОЛЯ =============
 
 function checkPasswordStrength(password) {
-    console.log('Checking password strength:', password)
-    
     const strength = {
         length: password.length >= 6,
         number: /\d/.test(password),
         letter: /[a-zA-Z]/.test(password)
     }
     
-    console.log('Strength:', strength)
-    
-    // Обновляем требования
     const reqLength = document.getElementById('reqLength')
     const reqNumber = document.getElementById('reqNumber')
     const reqLetter = document.getElementById('reqLetter')
@@ -171,28 +172,21 @@ function checkPasswordStrength(password) {
         reqLetter.className = 'requirement' + (strength.letter ? ' met' : '')
     }
     
-    // Определяем общую силу пароля
     const score = Object.values(strength).filter(Boolean).length
-    console.log('Score:', score)
     
     if (strengthBar) {
         strengthBar.className = 'strength-bar'
         if (score === 3) {
             strengthBar.classList.add('strong')
-            console.log('Strong password')
         } else if (score === 2) {
             strengthBar.classList.add('medium')
-            console.log('Medium password')
         } else if (score >= 1) {
             strengthBar.classList.add('weak')
-            console.log('Weak password')
         }
     }
     
-    // Активируем кнопку если все требования выполнены
     if (saveBtn) {
         saveBtn.disabled = !(strength.length && strength.number && strength.letter)
-        console.log('Button disabled:', saveBtn.disabled)
     }
 }
 
@@ -235,7 +229,6 @@ async function register() {
         return
     }
 
-    // Форматируем номер
     let cleanPhone = phone.replace(/[^0-9]/g, '')
     if (!cleanPhone.startsWith('+')) {
         if (cleanPhone.length === 11 && cleanPhone.startsWith('7')) {
@@ -290,7 +283,6 @@ async function login() {
         return
     }
 
-    // Форматируем номер
     let cleanPhone = phone.replace(/[^0-9]/g, '')
     if (!cleanPhone.startsWith('+')) {
         if (cleanPhone.length === 11 && cleanPhone.startsWith('7')) {
@@ -336,53 +328,10 @@ async function login() {
 }
 
 function showPasswordSetupModal() {
-    console.log('Opening password setup modal for user:', currentUser)
-    
-    const newPasswordInput = document.getElementById('newPassword')
-    const confirmPasswordInput = document.getElementById('confirmPassword')
-    
-    if (newPasswordInput) newPasswordInput.value = ''
-    if (confirmPasswordInput) confirmPasswordInput.value = ''
-    
-    const strengthBar = document.getElementById('strengthBar')
-    if (strengthBar) {
-        strengthBar.className = 'strength-bar'
-        strengthBar.style.width = '0%'
-    }
-    
-    const reqLength = document.getElementById('reqLength')
-    const reqNumber = document.getElementById('reqNumber')
-    const reqLetter = document.getElementById('reqLetter')
-    
-    if (reqLength) {
-        reqLength.innerHTML = '❌ Минимум 6 символов'
-        reqLength.className = 'requirement'
-    }
-    if (reqNumber) {
-        reqNumber.innerHTML = '❌ Хотя бы одна цифра'
-        reqNumber.className = 'requirement'
-    }
-    if (reqLetter) {
-        reqLetter.innerHTML = '❌ Хотя бы одна буква'
-        reqLetter.className = 'requirement'
-    }
-    
-    const saveBtn = document.getElementById('savePasswordBtn')
-    if (saveBtn) {
-        saveBtn.disabled = true
-    }
-    
-    const modal = document.getElementById('passwordSetupModal')
-    if (modal) {
-        modal.classList.add('show')
-    } else {
-        console.error('Password setup modal not found!')
-    }
+    document.getElementById('passwordSetupModal').classList.add('show')
 }
 
 async function savePasswordForExisting() {
-    console.log('Saving password for existing user:', currentUser)
-    
     const password = document.getElementById('newPassword').value
     const confirm = document.getElementById('confirmPassword').value
     
@@ -401,17 +350,7 @@ async function savePasswordForExisting() {
         return
     }
     
-    const hasNumber = /\d/.test(password)
-    const hasLetter = /[a-zA-Z]/.test(password)
-    
-    if (!hasNumber || !hasLetter) {
-        showToast('Пароль должен содержать хотя бы одну цифру и одну букву')
-        return
-    }
-    
     try {
-        showToast('Сохранение пароля...')
-        
         const res = await fetch('/set-password', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -434,19 +373,15 @@ async function savePasswordForExisting() {
         
     } catch (error) {
         console.error('Error saving password:', error)
-        showToast('Ошибка сохранения пароля: ' + error.message)
+        showToast('Ошибка сохранения пароля')
     }
 }
 
 function closePasswordSetup() {
-    const modal = document.getElementById('passwordSetupModal')
-    if (modal) {
-        modal.classList.remove('show')
-    }
+    document.getElementById('passwordSetupModal').classList.remove('show')
 }
 
 function completeLogin() {
-    console.log('completeLogin: currentUser =', currentUser)
     document.getElementById('loginScreen').style.display = 'none'
     document.getElementById('app').style.display = 'flex'
     document.getElementById('sidebar').classList.add('open')
@@ -531,9 +466,9 @@ async function loadUserProfile() {
         
         const myAvatar = document.getElementById('myAvatarText')
         if (data.avatar) {
-            myAvatar.innerHTML = `<img src="${data.avatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;" onerror="this.onerror=null; this.parentElement.innerHTML='<i class=\'fas fa-user\'></i>'">`
+            myAvatar.innerHTML = `<img src="${data.avatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;" onerror="this.onerror=null; this.parentElement.innerText='?'">`
         } else {
-            myAvatar.innerHTML = '<i class="fas fa-user"></i>'
+            myAvatar.innerText = '?'
         }
         
     } catch (error) {
@@ -569,9 +504,9 @@ async function showUserProfile(phone, isMyProfile = false) {
         
         const modalAvatar = document.getElementById('modalAvatarText')
         if (user.avatar && (isMyProfile || settings.avatar_privacy !== 'nobody')) {
-            modalAvatar.innerHTML = `<img src="${user.avatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;" onerror="this.onerror=null; this.parentElement.innerHTML='<i class=\'fas fa-user\'></i>'">`
+            modalAvatar.innerHTML = `<img src="${user.avatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;" onerror="this.onerror=null; this.parentElement.innerText='?'">`
         } else {
-            modalAvatar.innerHTML = '<i class="fas fa-user"></i>'
+            modalAvatar.innerText = '?'
         }
         
         document.getElementById('modalName').innerText = user.name || 'Не указано'
@@ -607,7 +542,7 @@ async function showUserProfile(phone, isMyProfile = false) {
                 if (user.avatar) {
                     previewAvatar.innerHTML = `<img src="${user.avatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`
                 } else {
-                    previewAvatar.innerHTML = '<i class="fas fa-user"></i>'
+                    previewAvatar.innerText = '?'
                 }
                 
                 profileView.style.display = 'none'
@@ -708,8 +643,6 @@ document.getElementById('avatarInput')?.addEventListener('change', function(e) {
             return
         }
         
-        currentAvatarFile = file
-        
         const reader = new FileReader()
         reader.onload = function(e) {
             document.getElementById('previewAvatarText').innerHTML = 
@@ -726,7 +659,6 @@ function openAvatarEditor(imageUrl) {
     const image = document.getElementById('avatarImage')
     
     image.src = imageUrl
-    
     modal.classList.add('show')
     
     image.onload = function() {
@@ -861,7 +793,7 @@ async function removeAvatar() {
         
         showToast('Аватар удален')
         
-        document.getElementById('previewAvatarText').innerHTML = '<i class="fas fa-user"></i>'
+        document.getElementById('previewAvatarText').innerText = '?'
         document.getElementById('avatarInput').value = ''
         
         closeAvatarEditor()
@@ -873,6 +805,234 @@ async function removeAvatar() {
         console.error('Error removing avatar:', error)
         showToast('Ошибка удаления')
     }
+}
+
+// ============= ЭМОДЗИ И СТИКЕРЫ =============
+
+// Загрузить сохраненные стикеры
+async function loadStickers() {
+    try {
+        const res = await fetch(`/stickers/${currentUser}`)
+        if (res.ok) {
+            const data = await res.json()
+            userStickers = data.stickers || []
+            renderStickers()
+        }
+    } catch (error) {
+        console.error('Error loading stickers:', error)
+    }
+}
+
+// Открыть модальное окно с эмодзи и стикерами
+function openEmojiStickerModal() {
+    const modal = document.getElementById('emojiStickerModal')
+    
+    if (!emojiPicker) {
+        emojiPicker = new EmojiMart.Picker({
+            onEmojiSelect: (emoji) => {
+                insertEmoji(emoji.native)
+            },
+            theme: 'light',
+            set: 'apple',
+            skinTonePosition: 'none',
+            previewPosition: 'none'
+        })
+        document.getElementById('emoji-picker').appendChild(emojiPicker)
+    }
+    
+    loadStickers()
+    modal.classList.add('show')
+}
+
+function closeEmojiStickerModal() {
+    document.getElementById('emojiStickerModal').classList.remove('show')
+}
+
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'))
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'))
+    
+    document.getElementById(`tab${tab.charAt(0).toUpperCase() + tab.slice(1)}Btn`).classList.add('active')
+    document.getElementById(`${tab}Tab`).classList.add('active')
+}
+
+function insertEmoji(emoji) {
+    const input = document.getElementById('text')
+    const start = input.selectionStart
+    const end = input.selectionEnd
+    const text = input.value
+    
+    input.value = text.substring(0, start) + emoji + text.substring(end)
+    input.focus()
+    input.selectionStart = input.selectionEnd = start + emoji.length
+}
+
+function renderStickers() {
+    const myStickersDiv = document.getElementById('myStickers')
+    const popularStickersDiv = document.getElementById('popularStickers')
+    
+    if (myStickersDiv) {
+        myStickersDiv.innerHTML = ''
+        userStickers.forEach(sticker => {
+            const div = document.createElement('div')
+            div.className = 'sticker-item'
+            div.innerHTML = `<img src="${sticker}" alt="sticker" onclick="sendSticker('${sticker}')">`
+            myStickersDiv.appendChild(div)
+        })
+    }
+    
+    if (popularStickersDiv) {
+        popularStickersDiv.innerHTML = ''
+        popularStickers.forEach(sticker => {
+            const div = document.createElement('div')
+            div.className = 'sticker-item'
+            div.innerHTML = `<img src="${sticker}" alt="sticker" onclick="sendSticker('${sticker}')">`
+            popularStickersDiv.appendChild(div)
+        })
+    }
+}
+
+function sendSticker(stickerUrl) {
+    if (!currentChat) {
+        showToast('Выберите чат')
+        return
+    }
+    
+    ws.send(JSON.stringify({
+        action: 'send',
+        to: currentChat,
+        text: `[STICKER]${stickerUrl}[/STICKER]`
+    }))
+    
+    addStickerMessage(currentUser, stickerUrl)
+    closeEmojiStickerModal()
+}
+
+function addStickerMessage(user, stickerUrl) {
+    const messagesDiv = document.getElementById('messages')
+    const div = document.createElement('div')
+    
+    div.className = 'message sticker ' + (user === currentUser ? 'me' : 'other')
+    div.innerHTML = `<img src="${stickerUrl}" alt="sticker">`
+    
+    messagesDiv.appendChild(div)
+    messagesDiv.scrollTop = messagesDiv.scrollHeight
+}
+
+function addMessage(user, text, messageId = null) {
+    const messagesDiv = document.getElementById('messages')
+    const div = document.createElement('div')
+    
+    const stickerMatch = text.match(/\[STICKER\](.*?)\[\/STICKER\]/)
+    
+    if (stickerMatch) {
+        div.className = 'message sticker ' + (user === currentUser ? 'me' : 'other')
+        div.innerHTML = `<img src="${stickerMatch[1]}" alt="sticker">`
+    } else {
+        div.className = 'message ' + (user === currentUser ? 'me' : 'other')
+        
+        if (messageId) {
+            div.dataset.messageId = messageId
+        }
+        
+        const time = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+        
+        div.innerHTML = `
+            <div class="message-text">${escapeHtml(text)}</div>
+            <div class="message-time">${time}</div>
+        `
+    }
+    
+    if (user === currentUser && messageId && !stickerMatch) {
+        div.addEventListener('contextmenu', (e) => {
+            e.preventDefault()
+            showContextMenu(e, 'message', { messageId, element: div })
+        })
+    }
+    
+    messagesDiv.appendChild(div)
+    messagesDiv.scrollTop = messagesDiv.scrollHeight
+}
+
+document.getElementById('stickerFiles')?.addEventListener('change', handleStickerFiles)
+
+function handleStickerFiles(event) {
+    const files = Array.from(event.target.files)
+    const preview = document.getElementById('stickerPreview')
+    preview.innerHTML = ''
+    
+    files.forEach((file, index) => {
+        if (file.type.startsWith('image/')) {
+            const reader = new FileReader()
+            reader.onload = (e) => {
+                const div = document.createElement('div')
+                div.className = 'preview-item'
+                div.innerHTML = `
+                    <img src="${e.target.result}" alt="preview">
+                    <button class="remove-btn" onclick="this.parentElement.remove()">✕</button>
+                `
+                preview.appendChild(div)
+            }
+            reader.readAsDataURL(file)
+        }
+    })
+}
+
+async function uploadStickers() {
+    const files = document.getElementById('stickerFiles').files
+    if (files.length === 0) {
+        showToast('Выберите файлы для загрузки')
+        return
+    }
+    
+    const formData = new FormData()
+    for (let i = 0; i < files.length; i++) {
+        formData.append('stickers', files[i])
+    }
+    
+    try {
+        showToast('Загрузка стикеров...')
+        
+        const res = await fetch(`/upload-stickers/${currentUser}`, {
+            method: 'POST',
+            body: formData
+        })
+        
+        const data = await res.json()
+        
+        if (data.error) {
+            showToast(data.error)
+            return
+        }
+        
+        showToast('Стикеры загружены')
+        closeEmojiStickerModal()
+        
+    } catch (error) {
+        console.error('Error uploading stickers:', error)
+        showToast('Ошибка загрузки стикеров')
+    }
+}
+
+const uploadArea = document.getElementById('stickerUploadArea')
+if (uploadArea) {
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault()
+        uploadArea.classList.add('dragover')
+    })
+    
+    uploadArea.addEventListener('dragleave', () => {
+        uploadArea.classList.remove('dragover')
+    })
+    
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault()
+        uploadArea.classList.remove('dragover')
+        
+        const files = Array.from(e.dataTransfer.files)
+        document.getElementById('stickerFiles').files = e.dataTransfer.files
+        handleStickerFiles({ target: { files } })
+    })
 }
 
 // ============= ФУНКЦИИ ДЛЯ ЧАТОВ =============
@@ -892,9 +1052,9 @@ function createChatElement(chat) {
     
     let avatarHtml
     if (chat.avatar) {
-        avatarHtml = `<img src="${chat.avatar}" class="chat-avatar-img" alt="avatar" onerror="this.onerror=null; this.parentElement.innerHTML='<i class=\'fas fa-user\'></i>'">`
+        avatarHtml = `<img src="${chat.avatar}" class="chat-avatar-img" alt="avatar" onerror="this.onerror=null; this.parentElement.innerText='?'">`
     } else {
-        avatarHtml = '<i class="fas fa-user"></i>'
+        avatarHtml = '?'
     }
     
     const isOnline = window.clients && window.clients[chat.phone] === true
@@ -965,30 +1125,17 @@ async function loadChats() {
         return
     }
     
-    console.log('loadChats: loading chats for user', currentUser)
-    
     try {
         const url = `/users/${currentUser}`
-        console.log('loadChats: fetching', url)
-        
-        let res = await fetch(url)
-        console.log('loadChats: response status', res.status)
+        const res = await fetch(url)
         
         if (!res.ok) {
-            const errorText = await res.text()
-            console.error('loadChats: error response', errorText)
-            throw new Error(`Failed to load chats: ${res.status} ${res.statusText}`)
+            throw new Error(`Failed to load chats: ${res.status}`)
         }
         
         let chats = await res.json()
-        console.log('loadChats: received chats', chats)
         
         let list = document.getElementById('chatList')
-        if (!list) {
-            console.error('loadChats: chatList element not found')
-            return
-        }
-        
         list.innerHTML = ''
         
         const chatsCount = document.getElementById('chatsCount')
@@ -1006,11 +1153,9 @@ async function loadChats() {
             list.appendChild(createChatElement(chat))
         })
         
-        console.log('loadChats: successfully loaded', chats.length, 'chats')
-        
     } catch (error) {
         console.error('loadChats: error', error)
-        showToast('Ошибка загрузки чатов: ' + error.message)
+        showToast('Ошибка загрузки чатов')
     }
 }
 
@@ -1028,19 +1173,18 @@ function openChat(phone, displayName) {
             
             const chatAvatar = document.getElementById('chatAvatarText')
             if (user.avatar) {
-                chatAvatar.innerHTML = `<img src="${user.avatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;" onerror="this.onerror=null; this.parentElement.innerHTML='<i class=\'fas fa-user\'></i>'">`
+                chatAvatar.innerHTML = `<img src="${user.avatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;" onerror="this.onerror=null; this.parentElement.innerText='?'">`
             } else {
-                chatAvatar.innerHTML = '<i class="fas fa-user"></i>'
+                chatAvatar.innerText = '?'
             }
             
             const isOnline = window.clients && window.clients[phone] === true
             document.getElementById('chatUserStatus').textContent = isOnline ? 'online' : 'offline'
-            document.getElementById('chatUserStatus').className = `chat-user-status ${isOnline ? '' : 'offline'}`
         })
         .catch(() => {
             document.getElementById('chatUserName').innerText = displayName || phone
             document.getElementById('chatUserPhone').innerText = formatPhone(phone)
-            document.getElementById('chatAvatarText').innerHTML = '<i class="fas fa-user"></i>'
+            document.getElementById('chatAvatarText').innerText = '?'
         })
     
     document.getElementById('emptyChat').style.display = 'none'
@@ -1056,8 +1200,7 @@ function openChat(phone, displayName) {
         el.classList.remove('active')
     })
     
-    const cleanPhoneValue = cleanPhone(phone)
-    const activeChat = document.getElementById(`chat-${cleanPhoneValue}`)
+    const activeChat = document.getElementById(`chat-${cleanPhone(phone)}`)
     if (activeChat) {
         activeChat.classList.add('active')
     }
@@ -1099,55 +1242,6 @@ function send() {
     document.getElementById('text').value = ''
 }
 
-function addMessage(user, text, messageId = null) {
-    const messagesDiv = document.getElementById('messages')
-    const div = document.createElement('div')
-    
-    div.className = 'message ' + (user === currentUser ? 'me' : 'other')
-    
-    if (messageId) {
-        div.dataset.messageId = messageId
-    }
-    
-    const time = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
-    
-    div.innerHTML = `
-        <div class="message-text">${escapeHtml(text)}</div>
-        <div class="message-time">${time}</div>
-    `
-    
-    if (user === currentUser && messageId) {
-        let isLongPress = false
-        let touchTimeout
-        
-        div.addEventListener('contextmenu', (e) => {
-            e.preventDefault()
-            showContextMenu(e, 'message', { messageId, element: div })
-        })
-        
-        div.addEventListener('touchstart', (e) => {
-            e.preventDefault()
-            touchTimeout = setTimeout(() => {
-                isLongPress = true
-                if (window.navigator.vibrate) window.navigator.vibrate(50)
-                showContextMenu(e, 'message', { messageId, element: div })
-            }, 500)
-        })
-        
-        div.addEventListener('touchend', () => {
-            clearTimeout(touchTimeout)
-        })
-        
-        div.addEventListener('touchmove', () => {
-            clearTimeout(touchTimeout)
-            isLongPress = true
-        })
-    }
-    
-    messagesDiv.appendChild(div)
-    messagesDiv.scrollTop = messagesDiv.scrollHeight
-}
-
 // ============= КОНТЕКСТНОЕ МЕНЮ =============
 
 function showContextMenu(event, type, data) {
@@ -1183,16 +1277,6 @@ function showContextMenu(event, type, data) {
     menu.style.display = 'block'
     menu.style.left = x + 'px'
     menu.style.top = y + 'px'
-    
-    setTimeout(() => {
-        const rect = menu.getBoundingClientRect()
-        if (rect.right > window.innerWidth) {
-            menu.style.left = (window.innerWidth - rect.width - 10) + 'px'
-        }
-        if (rect.bottom > window.innerHeight) {
-            menu.style.top = (window.innerHeight - rect.height - 10) + 'px'
-        }
-    }, 0)
 }
 
 function hideContextMenus() {
@@ -1272,11 +1356,9 @@ function connect() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
         const wsUrl = `${protocol}//${window.location.host}/ws/${currentUser}`
         
-        console.log('Connecting to:', wsUrl)
         ws = new WebSocket(wsUrl)
 
         ws.onopen = () => {
-            console.log('WebSocket connected')
             isConnected = true
             reconnectAttempts = 0
             
@@ -1312,7 +1394,6 @@ function connect() {
                     
                     if (currentChat === data.from) {
                         document.getElementById('chatUserStatus').textContent = data.online ? 'online' : 'offline'
-                        document.getElementById('chatUserStatus').className = `chat-user-status ${data.online ? '' : 'offline'}`
                     }
                 }
             }
@@ -1367,7 +1448,6 @@ function connect() {
         }
 
         ws.onclose = () => {
-            console.log('WebSocket disconnected')
             broadcastOnlineStatus(false)
             
             if (window.clients) {
@@ -1395,7 +1475,6 @@ function handleReconnect() {
     if (reconnectAttempts < maxReconnectAttempts && currentUser) {
         reconnectAttempts++
         const delay = 1000 * Math.pow(2, reconnectAttempts)
-        console.log(`Reconnect attempt ${reconnectAttempts} in ${delay}ms`)
         reconnectTimeout = setTimeout(connect, delay)
     }
 }
@@ -1436,7 +1515,7 @@ function displaySearchResults(users) {
         if (user.avatar) {
             avatarHtml = `<img src="${user.avatar}" alt="avatar">`
         } else {
-            avatarHtml = '<i class="fas fa-user"></i>'
+            avatarHtml = '?'
         }
         
         div.innerHTML = `
@@ -1695,15 +1774,14 @@ document.addEventListener('keydown', (e) => {
         closeAvatarEditor()
         closeChangePassword()
         closePasswordSetup()
+        closeEmojiStickerModal()
     }
 })
 
-// Инициализация
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('loginPhone').focus()
 })
 
-// Обработка потери соединения
 window.addEventListener('online', () => {
     showToast('Соединение восстановлено')
     if (!isConnected && currentUser) {
@@ -1715,12 +1793,10 @@ window.addEventListener('offline', () => {
     showToast('Потеряно соединение с интернетом')
 })
 
-// Очистка при закрытии
 window.addEventListener('beforeunload', () => {
     if (pingInterval) clearInterval(pingInterval)
     if (reconnectTimeout) clearTimeout(reconnectTimeout)
     if (ws) ws.close(1000, 'Page closed')
 })
 
-// Периодическое обновление статусов
 setInterval(updateOnlineStatus, 5000)
