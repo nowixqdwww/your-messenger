@@ -7,6 +7,7 @@ import logging
 import shutil
 import asyncpg
 import hashlib
+import base64
 from datetime import datetime
 from pydantic import BaseModel
 import uvicorn
@@ -72,11 +73,11 @@ async def init_db():
                     name TEXT,
                     bio TEXT,
                     avatar TEXT,
-                    password TEXT NOT NULL,
+                    password TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            logger.info("Created users table with password column")
+            logger.info("Created users table")
         else:
             # Проверяем, есть ли колонка password
             column_exists = await conn.fetchval("""
@@ -137,6 +138,10 @@ class UserRegister(BaseModel):
     name: str = None
 
 class UserLogin(BaseModel):
+    phone: str
+    password: str
+
+class SetPassword(BaseModel):
     phone: str
     password: str
 
@@ -241,6 +246,32 @@ async def login(data: UserLogin):
         
     except Exception as e:
         logger.error(f"Error in /auth/login: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/set-password")
+async def set_password(data: SetPassword):
+    """Установка пароля для существующего пользователя"""
+    try:
+        phone = data.phone
+        password = data.password
+        
+        # Декодируем base64
+        decoded = base64.b64decode(password).decode()
+        hashed = hash_password(decoded)
+        
+        conn = await get_db()
+        
+        await conn.execute("""
+            UPDATE users SET password = $1 WHERE phone = $2
+        """, hashed, phone)
+        
+        await conn.close()
+        
+        logger.info(f"Password set for {phone}")
+        return {"ok": True}
+        
+    except Exception as e:
+        logger.error(f"Error setting password: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.post("/auth/change-password")
@@ -721,79 +752,100 @@ async def websocket_endpoint(ws: WebSocket, user: str):
     
     try:
         while True:
-            data = await ws.receive_json()
-            action = data.get("action")
+            try:
+                data = await ws.receive_json()
+                action = data.get("action")
 
-            if action == "ping":
-                await ws.send_json({"action": "pong"})
-                continue
-
-            if action == "send":
-                to = data.get("to")
-                text = data.get("text")
-                
-                if not to or not text:
+                if action == "ping":
+                    await ws.send_json({"action": "pong"})
                     continue
 
-                # Сохраняем в БД
-                conn = await get_db()
-                message_id = await conn.fetchval("""
-                    INSERT INTO messages (sender, receiver, text) 
-                    VALUES ($1, $2, $3) RETURNING id
-                """, user, to, text)
-                await conn.close()
+                if action == "send":
+                    to = data.get("to")
+                    text = data.get("text")
+                    
+                    if not to or not text:
+                        continue
 
-                # Отправляем получателю
-                if to in clients:
-                    try:
-                        await clients[to].send_json({
-                            "action": "message",
-                            "id": message_id,
-                            "from": user,
-                            "text": text
+                    # Сохраняем в БД
+                    conn = await get_db()
+                    message_id = await conn.fetchval("""
+                        INSERT INTO messages (sender, receiver, text) 
+                        VALUES ($1, $2, $3) RETURNING id
+                    """, user, to, text)
+                    await conn.close()
+
+                    # Отправляем получателю
+                    if to in clients:
+                        try:
+                            await clients[to].send_json({
+                                "action": "message",
+                                "id": message_id,
+                                "from": user,
+                                "text": text
+                            })
+                        except:
+                            clients.pop(to, None)
+
+                    # Подтверждение отправителю
+                    await ws.send_json({
+                        "action": "message_sent",
+                        "id": message_id,
+                        "to": to,
+                        "text": text
+                    })
+
+                elif action == "typing":
+                    to = data.get("to")
+                    if to and to in clients:
+                        try:
+                            await clients[to].send_json({
+                                "action": "typing",
+                                "from": user
+                            })
+                        except:
+                            clients.pop(to, None)
+
+                elif action == "status":
+                    to = data.get("to")
+                    online = data.get("online", True)
+                    
+                    if to and to in clients:
+                        try:
+                            await clients[to].send_json({
+                                "action": "status",
+                                "from": user,
+                                "online": online
+                            })
+                        except:
+                            clients.pop(to, None)
+
+                elif action == "history":
+                    chat_user = data.get("user")
+                    if chat_user:
+                        conn = await get_db()
+                        messages = await conn.fetch("""
+                            SELECT id, sender, text FROM messages
+                            WHERE ((sender = $1 AND receiver = $2) OR (sender = $2 AND receiver = $1))
+                            AND is_deleted = 0
+                            ORDER BY timestamp
+                        """, user, chat_user)
+                        await conn.close()
+                        
+                        await ws.send_json({
+                            "action": "history", 
+                            "messages": [[m['id'], m['sender'], m['text']] for m in messages]
                         })
-                    except:
-                        clients.pop(to, None)
 
-                # Подтверждение отправителю
-                await ws.send_json({
-                    "action": "message_sent",
-                    "id": message_id,
-                    "to": to,
-                    "text": text
-                })
+            except WebSocketDisconnect:
+                break
+            except Exception as e:
+                logger.error(f"WebSocket error: {e}")
+                continue
 
-            elif action == "typing":
-                to = data.get("to")
-                if to and to in clients:
-                    try:
-                        await clients[to].send_json({
-                            "action": "typing",
-                            "from": user
-                        })
-                    except:
-                        clients.pop(to, None)
-
-            elif action == "status":
-                to = data.get("to")
-                online = data.get("online", True)
-                
-                if to and to in clients:
-                    try:
-                        await clients[to].send_json({
-                            "action": "status",
-                            "from": user,
-                            "online": online
-                        })
-                    except:
-                        clients.pop(to, None)
-
-    except WebSocketDisconnect:
+    finally:
         clients.pop(user, None)
         logger.info(f"User {user} disconnected. Total: {len(clients)}")
-    except Exception as e:
-        logger.error(f"WebSocket error: {e}")
-        clients.pop(user, None)
 
 # ============= СТАТИЧЕСКИЕ ФАЙЛЫ =============
 
