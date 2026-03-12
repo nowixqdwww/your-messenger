@@ -825,6 +825,90 @@ async function loadStickers() {
 
 // Открыть модальное окно с эмодзи и стикерами
 function openEmojiStickerModal() {
+    console.log('Opening emoji sticker modal')
+    const modal = document.getElementById('emojiStickerModal')
+    
+    // Проверяем, загружена ли библиотека
+    if (typeof EmojiMart === 'undefined') {
+        console.error('EmojiMart not loaded')
+        showToast('Ошибка загрузки библиотеки эмодзи')
+        
+        // Используем простой эмодзи-пикер если EmojiMart не загружен
+        createSimpleEmojiPicker()
+    } else {
+        // Создаем EmojiMart picker
+        createEmojiMartPicker()
+    }
+    
+    loadStickers()
+    modal.classList.add('show')
+}
+
+// Создать простой эмодзи-пикер (запасной вариант)
+function createSimpleEmojiPicker() {
+    const container = document.getElementById('emoji-picker')
+    if (!container) return
+    
+    container.innerHTML = ''
+    container.className = 'simple-emoji-grid'
+    
+    const simpleEmojis = [
+        '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣',
+        '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰',
+        '😘', '😗', '😙', '😚', '😋', '😛', '😝', '😜',
+        '🤪', '🤨', '🧐', '🤓', '😎', '🥸', '🤩', '🥳',
+        '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '☹️',
+        '😣', '😖', '😫', '😩', '🥺', '😢', '😭', '😤',
+        '😠', '😡', '🤬', '🤯', '😳', '🥵', '🥶', '😱',
+        '😨', '😰', '😥', '😓', '🤗', '🤔', '🤭', '🤫',
+        '🤥', '😶', '😐', '😑', '😬', '🙄', '😯', '😦',
+        '😧', '😮', '😲', '🥱', '😴', '🤤', '😪', '😵'
+    ]
+    
+    simpleEmojis.forEach(emoji => {
+        const span = document.createElement('span')
+        span.className = 'simple-emoji'
+        span.textContent = emoji
+        span.onclick = () => insertEmoji(emoji)
+        container.appendChild(span)
+    })
+}
+
+// Создать EmojiMart picker
+function createEmojiMartPicker() {
+    const container = document.getElementById('emoji-picker')
+    if (!container) return
+    
+    container.innerHTML = ''
+    
+    try {
+        const picker = new EmojiMart.Picker({
+            onEmojiSelect: (emoji) => {
+                if (emoji.native) {
+                    insertEmoji(emoji.native)
+                }
+            },
+            theme: 'light',
+            set: 'apple',
+            skin: 1,
+            defaultSkin: 1,
+            emoji: 'smile',
+            size: 24,
+            showPreview: false,
+            showSearch: true,
+            showCategories: true,
+            emojiTooltip: true,
+            perLine: 8,
+            autoFocus: false
+        })
+        
+        container.appendChild(picker)
+    } catch (error) {
+        console.error('Error creating EmojiMart picker:', error)
+        createSimpleEmojiPicker()
+    }
+}
+
 function insertEmoji(emoji) {
     const input = document.getElementById('text')
     const start = input.selectionStart
@@ -888,41 +972,29 @@ function addStickerMessage(user, stickerUrl) {
     messagesDiv.scrollTop = messagesDiv.scrollHeight
 }
 
-function addMessage(user, text, messageId = null) {
-    const messagesDiv = document.getElementById('messages')
-    const div = document.createElement('div')
-    
-    const stickerMatch = text.match(/\[STICKER\](.*?)\[\/STICKER\]/)
-    
-    if (stickerMatch) {
-        div.className = 'message sticker ' + (user === currentUser ? 'me' : 'other')
-        div.innerHTML = `<img src="${stickerMatch[1]}" alt="sticker">`
-    } else {
-        div.className = 'message ' + (user === currentUser ? 'me' : 'other')
-        
-        if (messageId) {
-            div.dataset.messageId = messageId
-        }
-        
-        const time = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
-        
-        div.innerHTML = `
-            <div class="message-text">${escapeHtml(text)}</div>
-            <div class="message-time">${time}</div>
-        `
-    }
-    
-    if (user === currentUser && messageId && !stickerMatch) {
-        div.addEventListener('contextmenu', (e) => {
-            e.preventDefault()
-            showContextMenu(e, 'message', { messageId, element: div })
-        })
-    }
-    
-    messagesDiv.appendChild(div)
-    messagesDiv.scrollTop = messagesDiv.scrollHeight
+function closeEmojiStickerModal() {
+    document.getElementById('emojiStickerModal').classList.remove('show')
 }
 
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'))
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'))
+    
+    const tabId = tab === 'emoji' ? 'emoji' : tab === 'stickers' ? 'stickers' : 'upload'
+    
+    document.getElementById(`tab${tab.charAt(0).toUpperCase() + tab.slice(1)}Btn`).classList.add('active')
+    document.getElementById(`${tabId}Tab`).classList.add('active')
+    
+    if (tab === 'emoji') {
+        if (typeof EmojiMart === 'undefined') {
+            createSimpleEmojiPicker()
+        } else {
+            createEmojiMartPicker()
+        }
+    }
+}
+
+// Обработка загрузки стикеров
 document.getElementById('stickerFiles')?.addEventListener('change', handleStickerFiles)
 
 function handleStickerFiles(event) {
@@ -1211,6 +1283,41 @@ function send() {
     document.getElementById('text').value = ''
 }
 
+function addMessage(user, text, messageId = null) {
+    const messagesDiv = document.getElementById('messages')
+    const div = document.createElement('div')
+    
+    const stickerMatch = text.match(/\[STICKER\](.*?)\[\/STICKER\]/)
+    
+    if (stickerMatch) {
+        div.className = 'message sticker ' + (user === currentUser ? 'me' : 'other')
+        div.innerHTML = `<img src="${stickerMatch[1]}" alt="sticker">`
+    } else {
+        div.className = 'message ' + (user === currentUser ? 'me' : 'other')
+        
+        if (messageId) {
+            div.dataset.messageId = messageId
+        }
+        
+        const time = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+        
+        div.innerHTML = `
+            <div class="message-text">${escapeHtml(text)}</div>
+            <div class="message-time">${time}</div>
+        `
+    }
+    
+    if (user === currentUser && messageId && !stickerMatch) {
+        div.addEventListener('contextmenu', (e) => {
+            e.preventDefault()
+            showContextMenu(e, 'message', { messageId, element: div })
+        })
+    }
+    
+    messagesDiv.appendChild(div)
+    messagesDiv.scrollTop = messagesDiv.scrollHeight
+}
+
 // ============= КОНТЕКСТНОЕ МЕНЮ =============
 
 function showContextMenu(event, type, data) {
@@ -1246,6 +1353,16 @@ function showContextMenu(event, type, data) {
     menu.style.display = 'block'
     menu.style.left = x + 'px'
     menu.style.top = y + 'px'
+    
+    setTimeout(() => {
+        const rect = menu.getBoundingClientRect()
+        if (rect.right > window.innerWidth) {
+            menu.style.left = (window.innerWidth - rect.width - 10) + 'px'
+        }
+        if (rect.bottom > window.innerHeight) {
+            menu.style.top = (window.innerHeight - rect.height - 10) + 'px'
+        }
+    }, 0)
 }
 
 function hideContextMenus() {
@@ -1769,6 +1886,3 @@ window.addEventListener('beforeunload', () => {
 })
 
 setInterval(updateOnlineStatus, 5000);
-
-
-
