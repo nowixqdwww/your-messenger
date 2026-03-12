@@ -52,7 +52,6 @@ def create_safe_filename(phone: str, extension: str) -> str:
 
 # Функция для хеширования пароля
 def hash_password(password):
-    """Хеширование пароля с солью"""
     salt = "nonblock_salt"
     return hashlib.sha256((password + salt).encode()).hexdigest()
 
@@ -103,20 +102,10 @@ async def init_db():
                 receiver TEXT NOT NULL,
                 text TEXT NOT NULL,
                 is_deleted INTEGER DEFAULT 0,
+                is_read INTEGER DEFAULT 0,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
-        # Проверяем и добавляем колонку is_read
-        column_exists = await conn.fetchval("""
-            SELECT EXISTS (
-                SELECT FROM information_schema.columns 
-                WHERE table_name = 'messages' AND column_name = 'is_read'
-            )
-        """)
-        if not column_exists:
-            await conn.execute("ALTER TABLE messages ADD COLUMN is_read INTEGER DEFAULT 0")
-            logger.info("Added is_read column to messages table")
         
         # Таблица стикеров
         await conn.execute("""
@@ -842,18 +831,6 @@ async def websocket_endpoint(ws: WebSocket, user: str):
     finally:
         clients.pop(user, None)
         logger.info(f"User {user} disconnected. Total: {len(clients)}")
-
-# ============= ОТЛАДОЧНЫЕ ЭНДПОИНТЫ =============
-
-@app.get("/debug/users")
-async def debug_users():
-    try:
-        conn = await get_db()
-        users = await conn.fetch("SELECT phone, username, name FROM users")
-        await conn.close()
-        return {"users": [dict(u) for u in users]}
-    except Exception as e:
-        return {"error": str(e)}
 
 # ============= СТАТИЧЕСКИЕ ФАЙЛЫ =============
 
