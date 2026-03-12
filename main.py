@@ -219,48 +219,45 @@ async def register(user: UserRegister):
 
 @app.post("/auth/login")
 async def login(data: UserLogin):
+    """Вход по номеру и паролю"""
     try:
         conn = await get_db()
+        
+        # Получаем пользователя
         user = await conn.fetchrow(
             "SELECT phone, password FROM users WHERE phone = $1",
             data.phone
         )
+        
         await conn.close()
-
+        
         if not user:
             return JSONResponse(status_code=404, content={"error": "Пользователь не найден"})
-
-        # Важно: проверяем, есть ли пароль в базе (может быть None или пустая строка)
-        if user['password'] is None or user['password'] == '':
-            # Возвращаем 401, но с понятным для фронтенда кодом ошибки
+        
+        # Проверяем, есть ли пароль
+        if user['password'] is None:
             return JSONResponse(status_code=401, content={"error": "NO_PASSWORD_SET"})
-
+        
+        # Проверяем пароль
         if user['password'] != hash_password(data.password):
             return JSONResponse(status_code=401, content={"error": "Неверный пароль"})
-
+        
         return {"ok": True, "phone": user['phone']}
-
+        
     except Exception as e:
         logger.error(f"Error in /auth/login: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.post("/set-password")
-async def set_password(data: dict):
+async def set_password(data: SetPassword):
     """Установка пароля для существующего пользователя"""
     try:
-        phone = data.get("phone")
-        password = data.get("password")
-        
-        print(f"Setting password for {phone}")  # Для отладки
-        print(f"Password (base64): {password}")
+        phone = data.phone
+        password = data.password
         
         # Декодируем base64
-        import base64
         decoded = base64.b64decode(password).decode()
-        print(f"Password (decoded): {decoded}")
-        
         hashed = hash_password(decoded)
-        print(f"Password (hashed): {hashed}")
         
         conn = await get_db()
         
@@ -275,7 +272,6 @@ async def set_password(data: dict):
         
     except Exception as e:
         logger.error(f"Error setting password: {e}")
-        print(f"Error: {e}")  # Для отладки
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.post("/auth/change-password")
@@ -555,6 +551,7 @@ async def search_users(query: str):
 async def get_users(me: str):
     """Получение списка чатов пользователя"""
     try:
+        print(f"Getting users for {me}")  # Для отладки
         conn = await get_db()
         
         # Находим всех собеседников
@@ -564,6 +561,8 @@ async def get_users(me: str):
             FROM messages
             WHERE sender = $1 OR receiver = $1
         """, me)
+        
+        print(f"Found contacts: {contacts}")  # Для отладки
         
         result = []
         for contact in contacts:
@@ -606,10 +605,12 @@ async def get_users(me: str):
             })
         
         await conn.close()
+        print(f"Returning {len(result)} chats")  # Для отладки
         return result
         
     except Exception as e:
-        logger.error(f"Error getting users: {e}")
+        print(f"Error in get_users: {e}")  # Для отладки
+        logger.error(f"Error getting users for {me}: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.get("/messages/{user1}/{user2}")
@@ -851,6 +852,30 @@ async def websocket_endpoint(ws: WebSocket, user: str):
         clients.pop(user, None)
         logger.info(f"User {user} disconnected. Total: {len(clients)}")
 
+# ============= ОТЛАДОЧНЫЕ ЭНДПОИНТЫ =============
+
+@app.get("/debug/users")
+async def debug_users():
+    """Отладка: показать всех пользователей"""
+    try:
+        conn = await get_db()
+        users = await conn.fetch("SELECT phone, username, name FROM users")
+        await conn.close()
+        return {"users": [dict(u) for u in users]}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/debug/messages")
+async def debug_messages():
+    """Отладка: показать все сообщения"""
+    try:
+        conn = await get_db()
+        messages = await conn.fetch("SELECT id, sender, receiver, text FROM messages LIMIT 10")
+        await conn.close()
+        return {"messages": [dict(m) for m in messages]}
+    except Exception as e:
+        return {"error": str(e)}
+
 # ============= СТАТИЧЕСКИЕ ФАЙЛЫ =============
 
 if os.path.exists("web"):
@@ -872,5 +897,3 @@ if __name__ == "__main__":
         port=port,
         reload=False
     )
-
-
