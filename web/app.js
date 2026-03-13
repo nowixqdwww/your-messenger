@@ -24,11 +24,14 @@ let searchTimeout = null
 let cropper = null
 let currentAvatarFile = null
 
-// Для эмодзи и стикеров
-let emojiPicker = null
+// Для стикеров
 let userStickers = []
 let popularStickers = [
-    '/static/stickers/popular/1.svg'
+    '/static/stickers/popular/1.svg',
+    '/static/stickers/popular/2.svg',
+    '/static/stickers/popular/3.svg',
+    '/static/stickers/popular/4.svg',
+    '/static/stickers/popular/5.svg'
 ]
 
 // Глобальный объект для хранения онлайн статусов
@@ -37,12 +40,6 @@ window.clients = {}
 // Хранилище чатов и непрочитанных сообщений
 let chatsCache = {}
 let unreadCounts = {}
-
-// ============= ПРОВЕРКА ЗАГРУЗКИ EMOJIMART =============
-console.log('=== EmojiMart Debug ===');
-console.log('window.EmojiMart:', typeof window.EmojiMart);
-console.log('window keys with Emoji:', Object.keys(window).filter(k => k.includes('Emoji')));
-console.log('======================');
 
 // ============= ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =============
 
@@ -809,7 +806,7 @@ async function removeAvatar() {
     }
 }
 
-// ============= ЭМОДЗИ И СТИКЕРЫ =============
+// ============= СТИКЕРЫ =============
 
 // Загрузить сохраненные стикеры
 async function loadStickers() {
@@ -825,152 +822,99 @@ async function loadStickers() {
     }
 }
 
-// Открыть модальное окно с эмодзи и стикерами
-function openEmojiStickerModal() {
-    console.log('Opening emoji sticker modal')
-    const modal = document.getElementById('emojiStickerModal')
-    const chatBlock = document.getElementById('chatBlock')
+// Переключение модального окна стикеров
+function toggleStickerModal() {
+    const modal = document.getElementById('stickerModal')
+    
+    if (modal.classList.contains('show')) {
+        closeStickerModal()
+    } else {
+        openStickerModal()
+    }
+}
+
+// Открыть модальное окно стикеров
+function openStickerModal() {
+    console.log('Opening sticker modal')
+    const modal = document.getElementById('stickerModal')
+    const btn = document.getElementById('stickerBtn')
+    const inputArea = document.querySelector('.input-area')
     
     if (!modal) {
         console.error('Modal not found')
         return
     }
     
-    // Проверяем, не открыто ли уже окно
-    if (modal.classList.contains('show')) {
-        closeEmojiStickerModal()
-        return
+    // Позиционируем модальное окно над кнопкой
+    if (btn && inputArea) {
+        const btnRect = btn.getBoundingClientRect()
+        const inputRect = inputArea.getBoundingClientRect()
+        
+        // Позиционируем справа от кнопки
+        modal.style.bottom = (window.innerHeight - inputRect.top + 10) + 'px'
+        modal.style.right = (window.innerWidth - btnRect.right + 10) + 'px'
     }
     
-    // Добавляем класс для сдвига чата
-    if (chatBlock && window.innerWidth > 768) {
-        chatBlock.classList.add('emoji-open')
-    }
-    
-    // Проверяем, загружена ли библиотека через window
-    if (typeof window.EmojiMart === 'undefined') {
-        console.error('EmojiMart not loaded, using simple picker')
-        showToast('Используем простой набор эмодзи')
-        createSimpleEmojiPicker()
-    } else {
-        // Библиотека загружена
-        console.log('EmojiMart loaded, creating picker...')
-        createEmojiMartPicker()
-    }
-    
+    // Загружаем стикеры
     loadStickers()
+    
+    // Показываем модальное окно
     modal.classList.add('show')
+    btn.classList.add('active')
 }
 
-// Создать EmojiMart picker для версии 3.0.1
-function createEmojiMartPicker() {
-    const container = document.getElementById('emoji-picker')
-    if (!container) return
+// Закрыть модальное окно стикеров
+function closeStickerModal() {
+    console.log('Closing sticker modal')
+    const modal = document.getElementById('stickerModal')
+    const btn = document.getElementById('stickerBtn')
     
-    container.innerHTML = ''
+    if (modal) {
+        modal.classList.remove('show')
+    }
     
-    try {
-        console.log('Creating EmojiMart picker (v3.0.1)...')
-        console.log('window.EmojiMart:', window.EmojiMart)
-        
-        // Проверяем, есть ли Picker в библиотеке
-        if (!window.EmojiMart || !window.EmojiMart.Picker) {
-            throw new Error('EmojiMart.Picker not found')
-        }
-        
-        const picker = new window.EmojiMart.Picker({
-            onSelect: (emoji) => {
-                console.log('Emoji selected:', emoji)
-                if (emoji.native) {
-                    insertEmoji(emoji.native)
-                }
-            },
-            set: 'apple',
-            theme: 'light',
-            title: 'Выберите эмодзи',
-            emoji: 'smile',
-            showPreview: false,
-            showSearch: true,
-            showCategories: true,
-            emojiTooltip: true,
-            perLine: 8,
-            native: true,
-            emojisToShowFilter: (emoji) => true,
-            include: ['people', 'nature', 'foods', 'activity', 'places', 'objects', 'symbols', 'flags']
-        })
-        
-        container.appendChild(picker)
-        console.log('EmojiMart picker created successfully')
-        
-    } catch (error) {
-        console.error('Error creating EmojiMart picker:', error)
-        createSimpleEmojiPicker()
+    if (btn) {
+        btn.classList.remove('active')
     }
 }
 
-// Создать простой эмодзи-пикер (запасной вариант)
-function createSimpleEmojiPicker() {
-    const container = document.getElementById('emoji-picker')
-    if (!container) return
+// Переключение вкладок стикеров
+function switchStickerTab(tab) {
+    document.querySelectorAll('.sticker-tab-btn').forEach(btn => btn.classList.remove('active'))
+    document.querySelectorAll('.sticker-tab-content').forEach(content => content.classList.remove('active'))
     
-    console.log('Creating simple emoji picker')
-    container.innerHTML = ''
-    container.className = 'simple-emoji-grid'
-    
-    const simpleEmojis = [
-        '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣',
-        '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰',
-        '😘', '😗', '😙', '😚', '😋', '😛', '😝', '😜',
-        '🤪', '🤨', '🧐', '🤓', '😎', '🥸', '🤩', '🥳',
-        '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '☹️',
-        '😣', '😖', '😫', '😩', '🥺', '😢', '😭', '😤',
-        '😠', '😡', '🤬', '🤯', '😳', '🥵', '🥶', '😱',
-        '😨', '😰', '😥', '😓', '🤗', '🤔', '🤭', '🤫',
-        '🤥', '😶', '😐', '😑', '😬', '🙄', '😯', '😦',
-        '😧', '😮', '😲', '🥱', '😴', '🤤', '😪', '😵',
-        '🙈', '🙉', '🙊', '🐵', '🐶', '🐱', '🦊', '🐼',
-        '🐨', '🦁', '🐮', '🐷', '🐸', '🐙', '🦄', '🐧',
-        '🐦', '🐤', '🐣', '🐥', '🦆', '🦅', '🦉', '🦇',
-        '🐺', '🐗', '🐴', '🦄', '🐝', '🐛', '🦋', '🐌'
-    ]
-    
-    simpleEmojis.forEach(emoji => {
-        const span = document.createElement('span')
-        span.className = 'simple-emoji'
-        span.textContent = emoji
-        span.onclick = (e) => {
-            e.stopPropagation()
-            insertEmoji(emoji)
-        }
-        container.appendChild(span)
-    })
-    
-    console.log('Simple emoji picker created with', simpleEmojis.length, 'emojis')
+    if (tab === 'my') {
+        document.getElementById('tabMyBtn').classList.add('active')
+        document.getElementById('myStickersTab').classList.add('active')
+    } else if (tab === 'popular') {
+        document.getElementById('tabPopularBtn').classList.add('active')
+        document.getElementById('popularStickersTab').classList.add('active')
+    } else if (tab === 'upload') {
+        document.getElementById('tabUploadBtn').classList.add('active')
+        document.getElementById('uploadStickersTab').classList.add('active')
+    }
 }
 
-function insertEmoji(emoji) {
-    const input = document.getElementById('text')
-    const start = input.selectionStart
-    const end = input.selectionEnd
-    const text = input.value
-    
-    input.value = text.substring(0, start) + emoji + text.substring(end)
-    input.focus()
-    input.selectionStart = input.selectionEnd = start + emoji.length
-}
-
+// Отображение стикеров
 function renderStickers() {
     const myStickersDiv = document.getElementById('myStickers')
     const popularStickersDiv = document.getElementById('popularStickers')
+    const emptyMyStickers = document.getElementById('emptyMyStickers')
     
     if (myStickersDiv) {
         myStickersDiv.innerHTML = ''
-        userStickers.forEach(sticker => {
-            const div = document.createElement('div')
-            div.className = 'sticker-item'
-            div.innerHTML = `<img src="${sticker}" alt="sticker" onclick="sendSticker('${sticker}')">`
-            myStickersDiv.appendChild(div)
-        })
+        
+        if (userStickers.length === 0) {
+            if (emptyMyStickers) emptyMyStickers.style.display = 'block'
+        } else {
+            if (emptyMyStickers) emptyMyStickers.style.display = 'none'
+            userStickers.forEach(sticker => {
+                const div = document.createElement('div')
+                div.className = 'sticker-item'
+                div.innerHTML = `<img src="${sticker}" alt="sticker" onclick="sendSticker('${sticker}')">`
+                myStickersDiv.appendChild(div)
+            })
+        }
     }
     
     if (popularStickersDiv) {
@@ -984,6 +928,7 @@ function renderStickers() {
     }
 }
 
+// Отправить стикер
 function sendSticker(stickerUrl) {
     if (!currentChat) {
         showToast('Выберите чат')
@@ -997,9 +942,10 @@ function sendSticker(stickerUrl) {
     }))
     
     addStickerMessage(currentUser, stickerUrl)
-    closeEmojiStickerModal()
+    closeStickerModal()
 }
 
+// Добавить сообщение со стикером
 function addStickerMessage(user, stickerUrl) {
     const messagesDiv = document.getElementById('messages')
     const div = document.createElement('div')
@@ -1011,36 +957,40 @@ function addStickerMessage(user, stickerUrl) {
     messagesDiv.scrollTop = messagesDiv.scrollHeight
 }
 
-function closeEmojiStickerModal() {
-    console.log('Closing emoji sticker modal')
-    const modal = document.getElementById('emojiStickerModal')
-    const chatBlock = document.getElementById('chatBlock')
+// Обновленная функция addMessage для поддержки стикеров
+function addMessage(user, text, messageId = null) {
+    const messagesDiv = document.getElementById('messages')
+    const div = document.createElement('div')
     
-    if (modal) {
-        modal.classList.remove('show')
-    }
+    const stickerMatch = text.match(/\[STICKER\](.*?)\[\/STICKER\]/)
     
-    if (chatBlock) {
-        chatBlock.classList.remove('emoji-open')
-    }
-}
-
-function switchTab(tab) {
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'))
-    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'))
-    
-    const tabId = tab === 'emoji' ? 'emoji' : tab === 'stickers' ? 'stickers' : 'upload'
-    
-    document.getElementById(`tab${tab.charAt(0).toUpperCase() + tab.slice(1)}Btn`).classList.add('active')
-    document.getElementById(`${tabId}Tab`).classList.add('active')
-    
-    if (tab === 'emoji') {
-        if (typeof window.EmojiMart === 'undefined') {
-            createSimpleEmojiPicker()
-        } else {
-            createEmojiMartPicker()
+    if (stickerMatch) {
+        div.className = 'message sticker ' + (user === currentUser ? 'me' : 'other')
+        div.innerHTML = `<img src="${stickerMatch[1]}" alt="sticker">`
+    } else {
+        div.className = 'message ' + (user === currentUser ? 'me' : 'other')
+        
+        if (messageId) {
+            div.dataset.messageId = messageId
         }
+        
+        const time = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+        
+        div.innerHTML = `
+            <div class="message-text">${escapeHtml(text)}</div>
+            <div class="message-time">${time}</div>
+        `
     }
+    
+    if (user === currentUser && messageId && !stickerMatch) {
+        div.addEventListener('contextmenu', (e) => {
+            e.preventDefault()
+            showContextMenu(e, 'message', { messageId, element: div })
+        })
+    }
+    
+    messagesDiv.appendChild(div)
+    messagesDiv.scrollTop = messagesDiv.scrollHeight
 }
 
 // Обработка загрузки стикеров
@@ -1096,7 +1046,7 @@ async function uploadStickers() {
         }
         
         showToast('Стикеры загружены')
-        closeEmojiStickerModal()
+        closeStickerModal()
         
     } catch (error) {
         console.error('Error uploading stickers:', error)
@@ -1330,41 +1280,6 @@ function send() {
     }))
 
     document.getElementById('text').value = ''
-}
-
-function addMessage(user, text, messageId = null) {
-    const messagesDiv = document.getElementById('messages')
-    const div = document.createElement('div')
-    
-    const stickerMatch = text.match(/\[STICKER\](.*?)\[\/STICKER\]/)
-    
-    if (stickerMatch) {
-        div.className = 'message sticker ' + (user === currentUser ? 'me' : 'other')
-        div.innerHTML = `<img src="${stickerMatch[1]}" alt="sticker">`
-    } else {
-        div.className = 'message ' + (user === currentUser ? 'me' : 'other')
-        
-        if (messageId) {
-            div.dataset.messageId = messageId
-        }
-        
-        const time = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
-        
-        div.innerHTML = `
-            <div class="message-text">${escapeHtml(text)}</div>
-            <div class="message-time">${time}</div>
-        `
-    }
-    
-    if (user === currentUser && messageId && !stickerMatch) {
-        div.addEventListener('contextmenu', (e) => {
-            e.preventDefault()
-            showContextMenu(e, 'message', { messageId, element: div })
-        })
-    }
-    
-    messagesDiv.appendChild(div)
-    messagesDiv.scrollTop = messagesDiv.scrollHeight
 }
 
 // ============= КОНТЕКСТНОЕ МЕНЮ =============
@@ -1909,7 +1824,7 @@ document.addEventListener('keydown', (e) => {
         closeAvatarEditor()
         closeChangePassword()
         closePasswordSetup()
-        closeEmojiStickerModal()
+        closeStickerModal()
     }
 })
 
@@ -1935,3 +1850,44 @@ window.addEventListener('beforeunload', () => {
 })
 
 setInterval(updateOnlineStatus, 5000);
+
+// Глобальные функции для HTML
+window.toggleSidebar = toggleSidebar
+window.closeChat = closeChat
+window.openChatProfile = openChatProfile
+window.openMyProfile = openMyProfile
+window.send = send
+window.showRegisterForm = showRegisterForm
+window.showLoginForm = showLoginForm
+window.register = register
+window.login = login
+window.savePasswordForExisting = savePasswordForExisting
+window.closePasswordSetup = closePasswordSetup
+window.openSettings = openSettings
+window.closeSettings = closeSettings
+window.savePhonePrivacy = savePhonePrivacy
+window.saveOnlinePrivacy = saveOnlinePrivacy
+window.saveAvatarPrivacy = saveAvatarPrivacy
+window.openBlockedUsers = openBlockedUsers
+window.openSessions = openSessions
+window.clearAllChats = clearAllChats
+window.exportData = exportData
+window.openChangePassword = openChangePassword
+window.closeChangePassword = closeChangePassword
+window.changePassword = changePassword
+window.removeAvatar = removeAvatar
+window.zoomIn = zoomIn
+window.zoomOut = zoomOut
+window.rotateLeft = rotateLeft
+window.rotateRight = rotateRight
+window.saveCroppedAvatar = saveCroppedAvatar
+window.closeAvatarEditor = closeAvatarEditor
+window.deleteMessage = deleteMessage
+window.deleteChat = deleteChat
+window.muteChat = muteChat
+window.clearChat = clearChat
+window.toggleStickerModal = toggleStickerModal
+window.closeStickerModal = closeStickerModal
+window.switchStickerTab = switchStickerTab
+window.sendSticker = sendSticker
+window.uploadStickers = uploadStickers
