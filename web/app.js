@@ -824,6 +824,7 @@ async function loadStickers() {
 }
 
 // Открыть модальное окно с эмодзи и стикерами
+// Открыть модальное окно с эмодзи и стикерами
 async function openEmojiStickerModal() {
     console.log('Opening emoji sticker modal')
     const modal = document.getElementById('emojiStickerModal')
@@ -845,13 +846,14 @@ async function openEmojiStickerModal() {
         chatBlock.classList.add('emoji-open')
     }
     
-    // Проверяем, загружена ли библиотека
-    if (typeof EmojiMart === 'undefined') {
+    // Проверяем, загружена ли библиотека (используем window)
+    if (typeof window.EmojiMart === 'undefined') {
         console.error('EmojiMart not loaded, using simple picker')
         showToast('Используем простой набор эмодзи')
         createSimpleEmojiPicker()
     } else {
         // Библиотека загружена
+        console.log('EmojiMart loaded, creating picker...')
         createEmojiMartPicker()
     }
     
@@ -868,8 +870,10 @@ function createEmojiMartPicker() {
     
     try {
         console.log('Creating EmojiMart picker (v3.0.1)...')
+        console.log('window.EmojiMart:', window.EmojiMart)
         
-        const picker = new EmojiMart.Picker({
+        // Используем window.EmojiMart
+        const picker = new window.EmojiMart.Picker({
             onSelect: (emoji) => {
                 console.log('Emoji selected:', emoji)
                 if (emoji.native) {
@@ -1026,7 +1030,7 @@ function switchTab(tab) {
     document.getElementById(`${tabId}Tab`).classList.add('active')
     
     if (tab === 'emoji') {
-        if (typeof EmojiMart === 'undefined') {
+        if (typeof window.EmojiMart === 'undefined') {
             createSimpleEmojiPicker()
         } else {
             createEmojiMartPicker()
@@ -1926,3 +1930,4 @@ window.addEventListener('beforeunload', () => {
 })
 
 setInterval(updateOnlineStatus, 5000);
+
