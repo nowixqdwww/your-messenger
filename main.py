@@ -493,47 +493,15 @@ async def get_stickers(phone: str):
         conn = await get_db()
         
         stickers = await conn.fetch("""
-            SELECT id, sticker_url FROM stickers WHERE user_phone = $1 ORDER BY created_at DESC
+            SELECT sticker_url FROM stickers WHERE user_phone = $1
         """, phone)
         
         await conn.close()
         
-        return {"stickers": [{"id": s['id'], "url": s['sticker_url']} for s in stickers]}
+        return {"stickers": [s['sticker_url'] for s in stickers]}
         
     except Exception as e:
         logger.error(f"Error getting stickers: {e}")
-        return JSONResponse(status_code=500, content={"error": str(e)})
-
-@app.delete("/stickers/{phone}/{sticker_id}")
-async def delete_sticker(phone: str, sticker_id: int):
-    try:
-        conn = await get_db()
-        
-        sticker = await conn.fetchrow(
-            "SELECT sticker_url, user_phone FROM stickers WHERE id = $1",
-            sticker_id
-        )
-        
-        if not sticker:
-            await conn.close()
-            return JSONResponse(status_code=404, content={"error": "Стикер не найден"})
-        
-        if sticker['user_phone'] != phone:
-            await conn.close()
-            return JSONResponse(status_code=403, content={"error": "Нет доступа"})
-        
-        # Удаляем файл
-        sticker_path = os.path.join(STICKER_DIR, os.path.basename(sticker['sticker_url']))
-        if os.path.exists(sticker_path):
-            os.remove(sticker_path)
-        
-        await conn.execute("DELETE FROM stickers WHERE id = $1", sticker_id)
-        await conn.close()
-        
-        return {"ok": True}
-        
-    except Exception as e:
-        logger.error(f"Error deleting sticker: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 # ============= ПОИСК =============
@@ -758,16 +726,25 @@ async def delete_message(message_id: int, user: str):
     try:
         conn = await get_db()
         
-        sender = await conn.fetchval(
-            "SELECT sender FROM messages WHERE id = $1",
+        row = await conn.fetchrow(
+            "SELECT sender, receiver FROM messages WHERE id = $1",
             message_id
         )
         
-        if not sender:
+        if not row:
             await conn.close()
             return JSONResponse(status_code=404, content={"error": "Message not found"})
         
-        if sender != user:
+        # Normalize phones for comparison (strip spaces, ensure + prefix)
+        def norm(p):
+            if not p:
+                return ''
+            p = p.strip().replace(' ', '')
+            if not p.startswith('+'):
+                p = '+' + p
+            return p
+        
+        if norm(row['sender']) != norm(user):
             await conn.close()
             return JSONResponse(status_code=403, content={"error": "Not authorized"})
         
@@ -776,7 +753,18 @@ async def delete_message(message_id: int, user: str):
             message_id
         )
         
+        receiver = row['receiver']
         await conn.close()
+        
+        # Notify receiver via websocket so their UI also removes the message
+        if receiver and receiver in clients:
+            try:
+                await clients[receiver].send_json({
+                    "action": "message_deleted",
+                    "id": message_id
+                })
+            except Exception:
+                clients.pop(receiver, None)
         
         return {"ok": True}
         
