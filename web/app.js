@@ -807,7 +807,117 @@ async function removeAvatar() {
     }
 }
 
-// ============= СТИКЕРЫ =============
+// ============= ЭМОДЗИ =============
+
+const EMOJI_CATEGORIES = [
+    {
+        id: 'smileys', icon: '😀', label: 'Смайлы',
+        emojis: ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','😚','😙','🥲','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','🥴','😵','🤯','🤠','🥳','🥸','😎','🤓','🧐','😕','😟','🙁','☹️','😮','😯','😲','😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠','🤬','😈','👿','💀','☠️','💩','🤡','👹','👺','👻','👽','👾','🤖']
+    },
+    {
+        id: 'gestures', icon: '👋', label: 'Жесты',
+        emojis: ['👋','🤚','🖐','✋','🖖','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝️','👍','👎','✊','👊','🤛','🤜','👏','🙌','🫶','👐','🤲','🤝','🙏','✍️','💅','🤳','💪','🦾','🦿','🦵','🦶','👂','🦻','👃','🫀','🫁','🧠','🦷','🦴','👀','👁','👅','👄','🫦','💋','🩸']
+    },
+    {
+        id: 'people', icon: '👤', label: 'Люди',
+        emojis: ['👶','🧒','👦','👧','🧑','👱','👨','🧔','👩','🧓','👴','👵','🙍','🙎','🙅','🙆','💁','🙋','🧏','🙇','🤦','🤷','👮','🕵️','💂','🥷','👷','🫅','🤴','👸','👲','🧕','🤵','👰','🤰','🫃','🫄','🤱','👼','🎅','🤶','🧑‍🎄','🦸','🦹','🧙','🧚','🧛','🧜','🧝','🧞','🧟','🧌','💆','💇','🚶','🧍','🧎','🏃','💃','🕺','🕴️','👯','🧖','🧗','🏌️','🏇','🧘','🛀','🛌','👫','👬','👭','💏','💑','👪']
+    },
+    {
+        id: 'nature', icon: '🌿', label: 'Природа',
+        emojis: ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐻‍❄️','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🙈','🙉','🙊','🐔','🐧','🐦','🐤','🦆','🦅','🦉','🦇','🐺','🐗','🐴','🦄','🐝','🪱','🐛','🦋','🐌','🐞','🐜','🪲','🦟','🦗','🕷','🦂','🐢','🐍','🦎','🦖','🦕','🐙','🦑','🦐','🦞','🦀','🐡','🐠','🐟','🐬','🐳','🐋','🦈','🦭','🐊','🐅','🐆','🦓','🦍','🦧','🦣','🐘','🦛','🦏','🐪','🐫','🦒','🦘','🦬','🐃','🌸','🌺','🌻','🌹','🌷','🌼','🪷','🌱','🌿','☘️','🍀','🎍','🎋','🍃','🍂','🍁','🪺','🪹','🍄','🌾','💐','🌵','🌴','🌳','🌲','🪵','🪨','🌙','⭐','🌟','💫','✨','☀️','🌤️','⛅','🌦️','🌧️','🌨️','❄️','🌊','🌈','🌫️','🌪️','🌬️']
+    },
+    {
+        id: 'food', icon: '🍕', label: 'Еда',
+        emojis: ['🍏','🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🍆','🥑','🫛','🥦','🥬','🥒','🌶️','🫑','🧄','🧅','🥔','🍠','🫘','🥜','🍞','🥐','🥖','🫓','🧀','🥚','🍳','🧈','🥞','🧇','🥓','🥩','🍗','🍖','🌭','🍔','🍟','🍕','🫔','🌮','🌯','🥙','🧆','🥚','🍜','🍝','🍛','🍲','🍣','🍱','🥟','🦪','🍤','🍙','🍚','🍘','🍥','🥮','🍢','🧁','🍰','🎂','🍮','🍭','🍬','🍫','🍿','🍩','🍪','🌰','🥜','☕','🍵','🧉','🍺','🍻','🥂','🍷','🥃','🍸','🍹','🧃','🥤','🧋','🍶','🍾']
+    },
+    {
+        id: 'activities', icon: '⚽', label: 'Активности',
+        emojis: ['⚽','🏀','🏈','⚾','🥎','🎾','🏐','🏉','🥏','🎱','🪀','🏓','🏸','🏒','🥅','⛳','🎣','🤿','🎽','🎿','🛷','🥌','🎯','🪃','🎲','🎮','🕹️','🎰','🧩','🪆','♟️','🎭','🎨','🖼️','🎪','🎢','🎡','🎠','🚀','🛸','🎆','🎇','🧨','✨','🎉','🎊','🎈','🎁','🎀','🎗️','🎟️','🎫','🏆','🥇','🥈','🥉','🎖️','🏅','🎪','🤹','🎭','🩰','🎬','🎤','🎧','🎼','🎵','🎶','🥁','🪘','🎷','🎺','🪗','🎸','🪕','🎻']
+    },
+    {
+        id: 'symbols', icon: '❤️', label: 'Символы',
+        emojis: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❤️‍🔥','❤️‍🩹','💕','💞','💓','💗','💖','💘','💝','💟','☮️','✝️','☪️','🕉️','☸️','✡️','🔯','🕎','☯️','☦️','🛐','⛎','♈','♉','♊','♋','♌','♍','♎','♏','♐','♑','♒','♓','🆔','⚛️','🉑','☢️','☣️','📴','📳','🈶','🈚','🈸','🈺','🈷️','✴️','🆚','💮','🉐','㊙️','㊗️','🈴','🈵','🈹','🈲','🅰️','🅱️','🆎','🆑','🅾️','🆘','❌','⭕','🛑','⛔','📛','🚫','✅','☑️','✔️','❎','🔝','🔛','🔜','🔚','💯','🔃','🔄','🔙','🔛','🔝','🔰','⭕','🔱','⚜️','🔰','♻️','💠','🔷','🔶','🔹','🔸','🔺','🔻','💠','🔘','🔲','🔳','⬛','⬜','◼️','◻️','◾','◽','▪️','▫️','🔼','🔽','⏫','⏬','⏩','⏪','⏭️','⏮️','🔀','🔁','🔂','▶️','⏸️','⏹️','⏺️','🎦','🔅','🔆','📶','📳','🔇','🔈','🔉','🔊','📢','📣','💬','💭','🗯️','💤','🔔','🔕']
+    }
+]
+
+let currentEmojiCategory = 'smileys'
+let emojiSearchTimeout = null
+
+function renderEmojiPicker() {
+    const container = document.getElementById('emojiPickerContainer')
+    if (!container) return
+
+    // Категории (иконки снизу)
+    const catBar = document.getElementById('emojiCategoryBar')
+    if (catBar) {
+        catBar.innerHTML = ''
+        EMOJI_CATEGORIES.forEach(cat => {
+            const btn = document.createElement('button')
+            btn.className = 'emoji-cat-btn' + (cat.id === currentEmojiCategory ? ' active' : '')
+            btn.textContent = cat.icon
+            btn.title = cat.label
+            btn.onclick = () => {
+                currentEmojiCategory = cat.id
+                document.getElementById('emojiSearch').value = ''
+                renderEmojiGrid()
+                document.querySelectorAll('.emoji-cat-btn').forEach(b => b.classList.remove('active'))
+                btn.classList.add('active')
+            }
+            catBar.appendChild(btn)
+        })
+    }
+
+    renderEmojiGrid()
+}
+
+function renderEmojiGrid(filter = '') {
+    const grid = document.getElementById('emojiGrid')
+    if (!grid) return
+
+    let emojis
+    const label = document.getElementById('emojiCategoryLabel')
+
+    if (filter) {
+        // поиск по всем категориям
+        emojis = EMOJI_CATEGORIES.flatMap(c => c.emojis).filter(e => {
+            // простая фильтрация по совпадению кодпоинтов — ищем вхождение
+            return e.includes(filter)
+        })
+        if (label) label.textContent = `Результаты: ${emojis.length}`
+    } else {
+        const cat = EMOJI_CATEGORIES.find(c => c.id === currentEmojiCategory)
+        emojis = cat ? cat.emojis : []
+        if (label) label.textContent = cat ? cat.label : ''
+    }
+
+    grid.innerHTML = ''
+    emojis.forEach((emoji, i) => {
+        const btn = document.createElement('button')
+        btn.className = 'emoji-item sticker-animate-in'
+        btn.textContent = emoji
+        btn.style.animationDelay = `${Math.min(i, 30) * 10}ms`
+        btn.onclick = () => insertEmoji(emoji)
+        grid.appendChild(btn)
+    })
+}
+
+function insertEmoji(emoji) {
+    const input = document.getElementById('text')
+    if (!input) return
+
+    const start = input.selectionStart ?? input.value.length
+    const end   = input.selectionEnd   ?? input.value.length
+    input.value = input.value.slice(0, start) + emoji + input.value.slice(end)
+    // Ставим курсор после вставленного эмодзи
+    const newPos = start + emoji.length
+    input.setSelectionRange(newPos, newPos)
+    input.focus()
+
+    // Лёгкая вибрация на мобильных
+    if (navigator.vibrate) navigator.vibrate(10)
+}
+
+
 
 // Загрузить сохраненные стикеры
 async function loadStickers() {
@@ -837,30 +947,33 @@ function toggleStickerModal() {
 
 // Открыть модальное окно стикеров
 function openStickerModal() {
-    console.log('Opening sticker modal')
     const modal = document.getElementById('stickerModal')
     const btn = document.getElementById('stickerBtn')
-    const inputArea = document.querySelector('.input-area')
     
-    if (!modal) {
-        console.error('Modal not found')
-        return
-    }
+    if (!modal) return
     
-    // Загружаем свежие стикеры
     loadStickers()
     
-    // Позиционируем модальное окно над кнопкой
-    if (btn && inputArea) {
-        const btnRect = btn.getBoundingClientRect()
+    // Позиционируем модалку над панелью ввода
+    const inputArea = document.querySelector('.input-area')
+    if (inputArea && btn) {
         const inputRect = inputArea.getBoundingClientRect()
-        
-        modal.style.bottom = (window.innerHeight - inputRect.top + 10) + 'px'
-        modal.style.right = (window.innerWidth - btnRect.right + 10) + 'px'
+        const btnRect = btn.getBoundingClientRect()
+        modal.style.bottom = (window.innerHeight - inputRect.top + 8) + 'px'
+        const rightOffset = window.innerWidth - btnRect.right
+        modal.style.right = Math.max(8, rightOffset - 8) + 'px'
+        modal.style.left = ''
+        if (window.innerWidth <= 768) {
+            modal.style.right = '8px'
+            modal.style.left = '8px'
+        }
     }
     
     modal.classList.add('show')
-    btn.classList.add('active')
+    if (btn) btn.classList.add('active')
+
+    // Рендерим эмодзи (дефолтная вкладка)
+    setTimeout(() => renderEmojiPicker(), 50)
 }
 
 // Закрыть модальное окно стикеров
@@ -882,17 +995,22 @@ function closeStickerModal() {
 function switchStickerTab(tab) {
     document.querySelectorAll('.sticker-tab-btn').forEach(btn => btn.classList.remove('active'))
     document.querySelectorAll('.sticker-tab-content').forEach(content => content.classList.remove('active'))
-    
-    if (tab === 'my') {
-        document.getElementById('tabMyBtn').classList.add('active')
-        document.getElementById('myStickersTab').classList.add('active')
-    } else if (tab === 'popular') {
-        document.getElementById('tabPopularBtn').classList.add('active')
-        document.getElementById('popularStickersTab').classList.add('active')
-    } else if (tab === 'upload') {
-        document.getElementById('tabUploadBtn').classList.add('active')
-        document.getElementById('uploadStickersTab').classList.add('active')
+
+    const tabMap = {
+        'emoji':   { btn: 'tabEmojiBtn',   content: 'emojiTab' },
+        'my':      { btn: 'tabMyBtn',      content: 'myStickersTab' },
+        'popular': { btn: 'tabPopularBtn', content: 'popularStickersTab' },
+        'upload':  { btn: 'tabUploadBtn',  content: 'uploadStickersTab' },
     }
+    const t = tabMap[tab]
+    if (!t) return
+
+    const btn = document.getElementById(t.btn)
+    const content = document.getElementById(t.content)
+    if (btn) btn.classList.add('active')
+    if (content) content.classList.add('active')
+
+    if (tab === 'emoji') renderEmojiPicker()
 }
 
 // Отображение стикеров
@@ -1520,88 +1638,55 @@ function hideContextMenus() {
 }
 
 async function deleteMessage() {
-    if (!selectedMessageId || !selectedMessageElement) return
-    
-    const elementToRemove = selectedMessageElement
-    const messageId = selectedMessageId
-    
-    hideContextMenus()
-    
-    // Optimistic UI — сразу анимируем исчезновение, не ждём сервер
-    elementToRemove.style.transition = 'transform 0.2s ease, opacity 0.2s ease'
-    elementToRemove.style.transform = 'scale(0.85)'
-    elementToRemove.style.opacity = '0'
-    
-    setTimeout(() => elementToRemove.remove(), 200)
+    if (!selectedMessageId || !currentChat) return
     
     try {
-        const res = await fetch(`/message/${messageId}?user=${encodeURIComponent(currentUser)}`, {
+        const res = await fetch(`/message/${selectedMessageId}?user=${currentUser}`, {
             method: 'DELETE'
         })
         
-        const data = await res.json()
-        
-        if (!res.ok) {
-            // Откатываем — показываем обратно
-            elementToRemove.style.transform = ''
-            elementToRemove.style.opacity = ''
-            // Если элемент уже удалён из DOM — возвращаем
-            if (!elementToRemove.parentElement) {
-                document.getElementById('messages').appendChild(elementToRemove)
-            }
-            showToast(data.error || 'Ошибка при удалении')
+        if (res.ok && selectedMessageElement) {
+            selectedMessageElement.remove()
+            showToast('Сообщение удалено')
         }
         
     } catch (error) {
         console.error('Error deleting message:', error)
-        showToast('Нет соединения с сервером')
+        showToast('Ошибка при удалении')
     }
+    
+    hideContextMenus()
 }
 
 async function deleteChat() {
     if (!selectedChatPhone) return
     
-    const chatPhone = selectedChatPhone
-    const chatElement = document.getElementById(`chat-${cleanPhone(chatPhone)}`)
-    const wasCurrentChat = currentChat === chatPhone
-    
-    hideContextMenus()
-    
-    // Optimistic UI — сразу скрываем элемент в списке
-    if (chatElement) {
-        chatElement.style.transition = 'transform 0.2s ease, opacity 0.2s ease, max-height 0.3s ease'
-        chatElement.style.opacity = '0'
-        chatElement.style.transform = 'translateX(-20px)'
-        chatElement.style.maxHeight = chatElement.offsetHeight + 'px'
-        setTimeout(() => {
-            chatElement.style.maxHeight = '0'
-            chatElement.style.padding = '0'
-            chatElement.style.margin = '0'
-        }, 180)
-        setTimeout(() => chatElement.remove(), 400)
-    }
-    
-    // Если этот чат открыт — сразу закрываем
-    if (wasCurrentChat) {
-        currentChat = null
-        document.getElementById('messages').innerHTML = ''
-        document.getElementById('emptyChat').style.display = 'flex'
-        document.getElementById('chatBlock').style.display = 'none'
-        if (window.innerWidth <= 768) {
-            document.getElementById('sidebar').classList.add('open')
-            const overlay = document.getElementById('sidebarOverlay')
-            if (overlay) overlay.classList.add('show')
-        }
-    }
+    if (!confirm('Удалить этот чат?')) return
     
     try {
-        await fetch(`/chat/${encodeURIComponent(currentUser)}/${encodeURIComponent(chatPhone)}`, {
+        const res = await fetch(`/chat/${currentUser}/${selectedChatPhone}`, {
             method: 'DELETE'
         })
+        
+        if (res.ok) {
+            const element = document.getElementById(`chat-${cleanPhone(selectedChatPhone)}`)
+            if (element) element.remove()
+            
+            if (currentChat === selectedChatPhone) {
+                currentChat = null
+                document.getElementById('emptyChat').style.display = 'flex'
+                document.getElementById('chatBlock').style.display = 'none'
+            }
+            
+            showToast('Чат удален')
+        }
+        
     } catch (error) {
         console.error('Error deleting chat:', error)
         showToast('Ошибка при удалении')
     }
+    
+    hideContextMenus()
 }
 
 function muteChat() {
@@ -1695,17 +1780,6 @@ function connect() {
                 data.messages.forEach(m => {
                     addMessage(m[1], m[2], m[0])
                 })
-            }
-
-            // Удаление сообщения (инициировано другим пользователем)
-            if (data.action === 'message_deleted') {
-                const el = document.querySelector(`[data-message-id="${data.id}"]`)
-                if (el) {
-                    el.style.transition = 'transform 0.2s ease, opacity 0.2s ease'
-                    el.style.transform = 'scale(0.85)'
-                    el.style.opacity = '0'
-                    setTimeout(() => el.remove(), 200)
-                }
             }
 
             if (data.action === 'typing') {
@@ -2116,6 +2190,9 @@ window.closeStickerModal = closeStickerModal
 window.switchStickerTab = switchStickerTab
 window.sendSticker = sendSticker
 window.uploadStickers = uploadStickers
+window.deleteSticker = deleteSticker
+window.insertEmoji = insertEmoji
+window.renderEmojiGrid = renderEmojiGrid
 // Глобальные функции для HTML
 window.showReactionsPanel = showReactionsPanel
 window.addReaction = addReaction
