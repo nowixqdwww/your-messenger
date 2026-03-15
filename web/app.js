@@ -844,13 +844,9 @@ let currentEmojiCategory = 'smileys'
 let emojiSearchTimeout = null
 
 function renderEmojiPicker() {
-    const container = document.getElementById('emojiPickerContainer')
-    if (!container) return
-
-    // Категории (иконки снизу)
+    // Рендерим панель категорий
     const catBar = document.getElementById('emojiCategoryBar')
-    if (catBar) {
-        catBar.innerHTML = ''
+    if (catBar && catBar.children.length === 0) {
         EMOJI_CATEGORIES.forEach(cat => {
             const btn = document.createElement('button')
             btn.className = 'emoji-cat-btn' + (cat.id === currentEmojiCategory ? ' active' : '')
@@ -858,7 +854,8 @@ function renderEmojiPicker() {
             btn.title = cat.label
             btn.onclick = () => {
                 currentEmojiCategory = cat.id
-                document.getElementById('emojiSearch').value = ''
+                const searchEl = document.getElementById('emojiSearch')
+                if (searchEl) searchEl.value = ''
                 renderEmojiGrid()
                 document.querySelectorAll('.emoji-cat-btn').forEach(b => b.classList.remove('active'))
                 btn.classList.add('active')
@@ -866,7 +863,6 @@ function renderEmojiPicker() {
             catBar.appendChild(btn)
         })
     }
-
     renderEmojiGrid()
 }
 
