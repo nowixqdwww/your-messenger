@@ -45,6 +45,7 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # Подключение к PostgreSQL
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/messenger")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
 async def get_db():
     conn = await asyncpg.connect(DATABASE_URL)
@@ -73,21 +74,9 @@ async def init_db():
                 bio TEXT,
                 avatar TEXT,
                 password TEXT,
-                last_seen TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
-        # Добавляем last_seen если не существует (для существующих БД)
-        col_exists = await conn.fetchval("""
-            SELECT EXISTS (
-                SELECT FROM information_schema.columns
-                WHERE table_name = 'users' AND column_name = 'last_seen'
-            )
-        """)
-        if not col_exists:
-            await conn.execute("ALTER TABLE users ADD COLUMN last_seen TIMESTAMP")
-            logger.info("Added last_seen column to users table")
         
         # Проверяем и добавляем колонку password если нужно
         column_exists = await conn.fetchval("""
@@ -516,6 +505,106 @@ async def get_stickers(phone: str):
         logger.error(f"Error getting stickers: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+# ============= ИМПОРТ СТИКЕРОВ ИЗ TELEGRAM =============
+
+class TelegramStickerImport(BaseModel):
+    pack_url: str
+    phone: str
+
+@app.post("/import-tg-stickers")
+async def import_tg_stickers(data: TelegramStickerImport):
+    """Импортирует пак стикеров из Telegram по ссылке t.me/addstickers/PackName"""
+    import httpx
+    import re
+
+    token = TELEGRAM_BOT_TOKEN
+    if not token:
+        return JSONResponse(status_code=400, content={"error": "Telegram Bot Token не настроен. Добавьте TELEGRAM_BOT_TOKEN в переменные окружения."})
+
+    # Извлекаем имя пака из ссылки
+    url = data.pack_url.strip()
+    match = re.search(r't[.]me/(?:addstickers/)?([A-Za-z0-9_]+)', url)
+    if not match:
+        return JSONResponse(status_code=400, content={"error": "Неверная ссылка. Формат: https://t.me/addstickers/PackName"})
+
+    pack_name = match.group(1)
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            # 1. Получаем информацию о паке
+            resp = await client.get(
+                f"https://api.telegram.org/bot{token}/getStickerSet",
+                params={"name": pack_name}
+            )
+            result = resp.json()
+
+            if not result.get("ok"):
+                desc = result.get("description", "Пак не найден")
+                return JSONResponse(status_code=404, content={"error": f"Telegram API: {desc}"})
+
+            stickers = result["result"]["stickers"]
+            set_title = result["result"]["title"]
+
+            # Берём только статические стикеры (не анимированные, не видео)
+            static_stickers = [s for s in stickers if not s.get("is_animated") and not s.get("is_video")]
+            if not static_stickers:
+                return JSONResponse(status_code=400, content={"error": "Пак содержит только анимированные стикеры (не поддерживается)"})
+
+            # Ограничиваем до 30 стикеров
+            static_stickers = static_stickers[:30]
+
+            conn = await get_db()
+            saved = 0
+
+            for sticker in static_stickers:
+                file_id = sticker["file_id"]
+
+                # 2. Получаем file_path
+                file_resp = await client.get(
+                    f"https://api.telegram.org/bot{token}/getFile",
+                    params={"file_id": file_id}
+                )
+                file_result = file_resp.json()
+                if not file_result.get("ok"):
+                    continue
+
+                file_path = file_result["result"]["file_path"]
+
+                # 3. Скачиваем файл
+                dl_resp = await client.get(
+                    f"https://api.telegram.org/file/bot{token}/{file_path}"
+                )
+                if dl_resp.status_code != 200:
+                    continue
+
+                # 4. Сохраняем
+                import time
+                filename = f"tg_{data.phone.replace('+','')}_{int(time.time()*1000)}_{saved}.webp"
+                file_save_path = os.path.join(STICKER_DIR, filename)
+                with open(file_save_path, "wb") as f:
+                    f.write(dl_resp.content)
+
+                await conn.execute(
+                    "INSERT INTO stickers (user_phone, sticker_url) VALUES ($1, $2)",
+                    data.phone, f"/stickers/{filename}"
+                )
+                saved += 1
+
+            await conn.close()
+
+            return {
+                "ok": True,
+                "pack_title": set_title,
+                "saved": saved,
+                "total": len(static_stickers)
+            }
+
+    except httpx.TimeoutException:
+        return JSONResponse(status_code=504, content={"error": "Таймаут при обращении к Telegram API"})
+    except Exception as e:
+        logger.error(f"Error importing TG stickers: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 # ============= ПОИСК =============
 
 @app.post("/search")
@@ -907,22 +996,6 @@ async def websocket_endpoint(ws: WebSocket, user: str):
                             })
                         except:
                             clients.pop(to, None)
-                    
-                    # При уходе оффлайн — сообщаем всем собеседникам last_seen
-                    if not online:
-                        from datetime import datetime, timezone
-                        last_seen_iso = datetime.now(timezone.utc).isoformat()
-                        # Уведомляем всех кто открыл чат с нами
-                        for contact_phone, contact_ws in list(clients.items()):
-                            if contact_phone != user:
-                                try:
-                                    await contact_ws.send_json({
-                                        "action": "last_seen",
-                                        "from": user,
-                                        "last_seen": last_seen_iso
-                                    })
-                                except:
-                                    pass
 
                 elif action == "history":
                     chat_user = data.get("user")
@@ -950,15 +1023,6 @@ async def websocket_endpoint(ws: WebSocket, user: str):
     finally:
         clients.pop(user, None)
         logger.info(f"User {user} disconnected. Total: {len(clients)}")
-        # Сохраняем время последнего визита
-        try:
-            conn = await get_db()
-            await conn.execute(
-                "UPDATE users SET last_seen = NOW() WHERE phone = $1", user
-            )
-            await conn.close()
-        except Exception as e:
-            logger.error(f"Error saving last_seen: {e}")
 
 # ============= СТАТИЧЕСКИЕ ФАЙЛЫ =============
 
