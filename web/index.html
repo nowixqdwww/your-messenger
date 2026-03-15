@@ -221,8 +221,41 @@
             <!-- Загрузка -->
             <div id="uploadStickersTab" class="sticker-tab-content">
                 <div class="sticker-upload">
-                    <p style="font-weight:600;font-size:14px;margin-bottom:4px;">Добавить стикеры</p>
-                    <p class="info-text">PNG, WEBP, GIF · Из Telegram: @Stickers → «Экспорт пака»</p>
+
+                    <!-- Импорт из Telegram по ссылке -->
+                    <div class="tg-import-section">
+                        <p class="tg-import-title"><i class="fab fa-telegram"></i> Импорт из Telegram</p>
+                        <p class="info-text">Вставьте ссылку на пак: t.me/addstickers/ИмяПака</p>
+                        <div class="tg-import-input-wrap">
+                            <input id="tgPackUrl" class="tg-import-input" placeholder="https://t.me/addstickers/..." type="url">
+                            <button class="tg-import-btn" onclick="previewTgPack()">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Превью пака -->
+                    <div id="tgPackPreview" class="tg-pack-preview" style="display:none;">
+                        <div class="tg-pack-info">
+                            <span class="tg-pack-name" id="tgPackName"></span>
+                            <span class="tg-pack-count" id="tgPackCount"></span>
+                        </div>
+                        <div class="tg-pack-stickers" id="tgPackStickers"></div>
+                        <div class="tg-import-actions">
+                            <button class="login-btn" id="tgImportBtn" onclick="importTgPack()" style="padding:11px;">
+                                <i class="fas fa-download"></i> Добавить все стикеры
+                            </button>
+                            <button class="tg-cancel-btn" onclick="cancelTgImport()">Отмена</button>
+                        </div>
+                        <div id="tgImportProgress" class="tg-import-progress" style="display:none;">
+                            <div class="tg-progress-bar"><div class="tg-progress-fill" id="tgProgressFill"></div></div>
+                            <span id="tgProgressText">Загрузка...</span>
+                        </div>
+                    </div>
+
+                    <div class="tg-divider"><span>или загрузить файлы</span></div>
+
+                    <!-- Загрузка файлов -->
                     <div class="upload-area" id="stickerUploadArea">
                         <i class="fas fa-cloud-upload-alt upload-icon"></i>
                         <p>Перетащите файлы сюда или нажмите для выбора</p>
@@ -232,7 +265,7 @@
                         </button>
                     </div>
                     <div id="stickerPreview" class="sticker-preview"></div>
-                    <button onclick="uploadStickers()" class="login-btn" style="margin-top:16px;padding:12px;">
+                    <button onclick="uploadStickers()" class="login-btn" style="margin-top:12px;padding:12px;">
                         <i class="fas fa-save"></i> Сохранить стикеры
                     </button>
                 </div>
