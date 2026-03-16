@@ -523,7 +523,8 @@ import traceback as _traceback
 def _tg_get(url: str) -> dict:
     """Синхронный GET к Telegram API через urllib (без внешних зависимостей)."""
     try:
-        with urllib.request.urlopen(url, timeout=20) as resp:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=20) as resp:
             return _json.loads(resp.read())
     except urllib.error.HTTPError as e:
         body = e.read()
@@ -534,10 +535,17 @@ def _tg_get(url: str) -> dict:
     except Exception as e:
         return {"ok": False, "description": str(e)}
 
+# Алиасы для нового эндпоинта
+_tg_request = _tg_get
+
 def _tg_download(url: str) -> bytes:
     """Скачивает файл по URL."""
-    with urllib.request.urlopen(url, timeout=30) as resp:
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=30) as resp:
         return resp.read()
+
+# Алиас
+_tg_download_file = _tg_download
 
 @app.post("/import-sticker-pack/{phone}")
 async def import_sticker_pack(phone: str, request: Request):
