@@ -534,16 +534,22 @@ async def get_stickers(phone: str):
         
         conn = await get_db()
         stickers = await conn.fetch("""
-            SELECT id, sticker_url FROM stickers WHERE user_phone = $1 ORDER BY created_at DESC
+            SELECT id, sticker_url, sticker_data IS NOT NULL as has_data
+            FROM stickers WHERE user_phone = $1 ORDER BY created_at DESC
         """, phone)
         await conn.close()
         
         result = []
         for s in stickers:
             url = s['sticker_url']
-            if url.startswith('data:'):
-                url = f"/api/sticker-data/{s['id']}"
-            result.append({"id": s['id'], "url": url})
+            sid = s['id']
+            has_data = s['has_data']
+            if url.startswith('data:') or url.startswith('/api/sticker-data/') or has_data:
+                result.append({"id": sid, "url": f"/api/sticker-data/{sid}"})
+            elif not url.startswith('/stickers/'):
+                # Внешний URL (напр. /static/)
+                result.append({"id": sid, "url": url})
+            # /stickers/... без данных — пропускаем (файл не существует на Render)
         return {"stickers": result}
         
     except Exception as e:
@@ -586,6 +592,24 @@ def _tg_download(url: str) -> bytes:
 
 # Алиас
 _tg_download_file = _tg_download
+
+@app.delete("/api/stickers-broken/{phone}")
+async def delete_broken_stickers(phone: str):
+    """Удаляем стикеры с битыми путями (файлов нет на диске и нет BYTEA)."""
+    try:
+        conn = await get_db()
+        result = await conn.execute("""
+            DELETE FROM stickers 
+            WHERE user_phone = $1 
+            AND sticker_url LIKE '/stickers/%'
+            AND sticker_data IS NULL
+        """, phone)
+        deleted = int(result.split()[-1])
+        await conn.close()
+        logger.info(f"Deleted {deleted} broken stickers for {phone}")
+        return {"ok": True, "deleted": deleted}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.delete("/api/stickers/{phone}/{sticker_id}")
 async def delete_sticker(phone: str, sticker_id: int):
