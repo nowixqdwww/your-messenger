@@ -1049,7 +1049,14 @@ function renderStickers() {
         myStickersDiv.innerHTML = ''
         
         if (userStickers.length === 0) {
-            if (emptyMyStickers) emptyMyStickers.style.display = 'block'
+            if (emptyMyStickers) {
+                emptyMyStickers.style.display = 'flex'
+                emptyMyStickers.innerHTML = `
+                    <span>Нет стикеров — добавьте через вкладку «+»</span>
+                    <button onclick="cleanBrokenStickers()" style="margin-top:8px;padding:6px 12px;background:#667eea;color:white;border:none;border-radius:8px;cursor:pointer;font-size:12px;">
+                        🗑 Очистить старые записи
+                    </button>`
+            }
         } else {
             if (emptyMyStickers) emptyMyStickers.style.display = 'none'
             userStickers.forEach((sticker, idx) => {
@@ -2377,6 +2384,17 @@ setInterval(() => {
     if (currentChat && window.clients && !window.clients[currentChat]) updateChatStatusText(currentChat, false)
 }, 60000)
 
+// ============= УДАЛЕНИЕ СТИКЕРА =============
+async function cleanBrokenStickers() {
+    try {
+        const res = await fetch(`/api/stickers-broken/${encodeURIComponent(currentUser)}`, { method: 'DELETE' })
+        const data = await res.json()
+        showToast(`Удалено ${data.deleted} устаревших стикеров`)
+        await loadStickers()
+    } catch(e) {
+        showToast('Ошибка очистки')
+    }
+}
 // ============= УДАЛЕНИЕ СТИКЕРА =============
 async function deleteSticker(stickerId, element) {
     try {
