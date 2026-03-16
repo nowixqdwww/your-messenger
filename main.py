@@ -615,7 +615,7 @@ async def import_sticker_pack(phone: str, request: Request):
         try:
             step = "check_existing"
             existing = await conn.fetchval("SELECT COUNT(*) FROM stickers WHERE user_phone = $1", phone)
-            can_add  = max(0, 200 - int(existing))
+            can_add  = max(0, 2000 - int(existing))
             stickers = stickers[:can_add]
             logger.info(f"TG import: existing={existing} can_add={can_add}")
 
