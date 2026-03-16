@@ -742,11 +742,15 @@ async def get_sticker_data(sticker_id: int):
         if not row:
             return JSONResponse(status_code=404, content={"error": "Not found"})
         if row['sticker_data']:
-            # Есть данные в БД — отдаём напрямую
             from fastapi.responses import Response
-            ext = row['sticker_url'].rsplit('.', 1)[-1].lower()
-            mime = "image/webp" if ext == "webp" else "image/png"
-            return Response(content=bytes(row['sticker_data']), media_type=mime)
+            data_bytes = bytes(row['sticker_data'])
+            # Определяем тип по magic bytes
+            mime = "image/webp" if data_bytes[:4] == b'RIFF' else "image/png"
+            return Response(
+                content=data_bytes,
+                media_type=mime,
+                headers={"Cache-Control": "public, max-age=86400"}
+            )
         else:
             # Старый стикер — редиректим на файл
             from fastapi.responses import RedirectResponse
