@@ -49,7 +49,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/messenger")
 
 # ═══ Вставьте сюда токен вашего Telegram-бота ═══════════════════════════
 # Получить: https://t.me/BotFather → /newbot → скопировать токен
-TG_BOT_TOKEN = "TOKEN"
+TG_BOT_TOKEN = "ВСТАВЬТЕ_ТОКЕН_СЮДА"
 # ════════════════════════════════════════════════════════════════════════
 
 async def get_db():
@@ -517,11 +517,22 @@ import urllib.parse
 import json as _json
 import time as _time
 import asyncio
+import urllib.error
+import traceback as _traceback
 
 def _tg_get(url: str) -> dict:
     """Синхронный GET к Telegram API через urllib (без внешних зависимостей)."""
-    with urllib.request.urlopen(url, timeout=20) as resp:
-        return _json.loads(resp.read())
+    try:
+        with urllib.request.urlopen(url, timeout=20) as resp:
+            return _json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        body = e.read()
+        try:
+            return _json.loads(body)
+        except Exception:
+            return {"ok": False, "description": f"HTTP {e.code}: {body[:200]}"}
+    except Exception as e:
+        return {"ok": False, "description": str(e)}
 
 def _tg_download(url: str) -> bytes:
     """Скачивает файл по URL."""
@@ -531,9 +542,12 @@ def _tg_download(url: str) -> bytes:
 @app.post("/import-sticker-pack/{phone}")
 async def import_sticker_pack(phone: str, request: Request):
     """Импорт стикер-пака из Telegram по ссылке или имени пака."""
+    step = "init"
     try:
+        step = "parse_body"
         body = await request.json()
         pack_input = body.get("url", "").strip()
+        logger.info(f"TG import: phone={phone} input={pack_input!r}")
 
         if not pack_input:
             return JSONResponse(status_code=400, content={"error": "Укажите ссылку или название пака"})
@@ -544,19 +558,20 @@ async def import_sticker_pack(phone: str, request: Request):
                 "error": "Токен бота не настроен. Вставьте токен в переменную TG_BOT_TOKEN в main.py"
             })
 
-        # Извлекаем имя пака из ссылки или берём как есть
-        match = _re.search(r't\.me/addstickers/([\w]+)', pack_input, _re.IGNORECASE)
-        pack_name = match.group(1) if match else pack_input.strip().lstrip('@')
+        step = "parse_pack_name"
+        import re as _re2
+        match = _re2.search(r't\.me/addstickers/([\w]+)', pack_input, _re2.IGNORECASE)
+        pack_name = match.group(1) if match else pack_input.strip().lstrip('@').split('/')[-1]
+        logger.info(f"TG import: pack_name={pack_name!r}")
 
         tg_api  = f"https://api.telegram.org/bot{token}"
         tg_file = f"https://api.telegram.org/file/bot{token}"
+        loop    = asyncio.get_running_loop()
 
-        # asyncio.get_running_loop() — правильный способ в Python 3.10+
-        loop = asyncio.get_running_loop()
-
-        # Получаем инфо о паке
-        pack_url  = f"{tg_api}/getStickerSet?name={urllib.parse.quote(pack_name, safe='')}"
-        pack_data = await loop.run_in_executor(None, _tg_get, pack_url)
+        step = "get_sticker_set"
+        qs        = urllib.parse.urlencode({"name": pack_name})
+        pack_data = await loop.run_in_executor(None, _tg_request, f"{tg_api}/getStickerSet?{qs}")
+        logger.info(f"TG getStickerSet ok={pack_data.get('ok')} desc={pack_data.get('description','')}")
 
         if not pack_data.get("ok"):
             desc = pack_data.get("description", "Пак не найден")
@@ -564,37 +579,40 @@ async def import_sticker_pack(phone: str, request: Request):
 
         stickers   = pack_data["result"]["stickers"]
         pack_title = pack_data["result"]["title"]
-        saved      = 0
+        logger.info(f"TG import: pack={pack_title!r} stickers={len(stickers)}")
+        saved = 0
 
+        step = "get_db"
         conn = await get_db()
         try:
-            existing  = await conn.fetchval("SELECT COUNT(*) FROM stickers WHERE user_phone = $1", phone)
-            can_add   = max(0, 200 - int(existing))
-            stickers  = stickers[:can_add]
+            step = "check_existing"
+            existing = await conn.fetchval("SELECT COUNT(*) FROM stickers WHERE user_phone = $1", phone)
+            can_add  = max(0, 200 - int(existing))
+            stickers = stickers[:can_add]
+            logger.info(f"TG import: existing={existing} can_add={can_add}")
 
-            for sticker in stickers:
+            for i, sticker in enumerate(stickers):
+                step = f"sticker_{i}_getfile"
                 file_id = sticker["file_id"]
-
-                # file_id передаём как параметр запроса — НЕ через quote
-                # urllib.parse.urlencode правильно кодирует все спецсимволы
-                furl  = f"{tg_api}/getFile?" + urllib.parse.urlencode({"file_id": file_id})
-                fdata = await loop.run_in_executor(None, _tg_get, furl)
+                qs2     = urllib.parse.urlencode({"file_id": file_id})
+                fdata   = await loop.run_in_executor(None, _tg_request, f"{tg_api}/getFile?{qs2}")
                 if not fdata.get("ok"):
+                    logger.warning(f"TG getFile failed: {fdata.get('description')}")
                     continue
 
                 file_path = fdata["result"]["file_path"]
                 dl_url    = f"{tg_file}/{file_path}"
 
-                # Скачиваем файл
-                content = await loop.run_in_executor(None, _tg_download, dl_url)
+                step = f"sticker_{i}_download"
+                content = await loop.run_in_executor(None, _tg_download_file, dl_url)
                 if not content:
                     continue
 
-                # Сохраняем
+                step = f"sticker_{i}_save"
                 ext      = ".webp" if file_path.endswith(".webp") else ".png"
-                filename = f"tg_{phone.replace('+','')}_{int(_time.time()*1000)}_{saved}{ext}"
+                ts       = int(_time.time() * 1000)
+                filename = f"tg_{phone.replace('+','')}_{ts}_{i}{ext}"
                 fpath    = os.path.join(STICKER_DIR, filename)
-
                 with open(fpath, "wb") as f_out:
                     f_out.write(content)
 
@@ -607,11 +625,13 @@ async def import_sticker_pack(phone: str, request: Request):
         finally:
             await conn.close()
 
+        logger.info(f"TG import done: saved={saved}")
         return {"ok": True, "title": pack_title, "total": len(stickers), "added": saved}
 
     except Exception as e:
-        logger.error(f"Error importing sticker pack: {e}")
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        tb = _traceback.format_exc()
+        logger.error(f"TG import ERROR at step={step}: {e}\n{tb}")
+        return JSONResponse(status_code=500, content={"error": str(e), "step": step})
 
 # ============= ПОИСК =============
 
