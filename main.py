@@ -124,10 +124,42 @@ async def init_db():
                 id SERIAL PRIMARY KEY,
                 user_phone TEXT NOT NULL,
                 sticker_url TEXT NOT NULL,
+                sticker_data BYTEA,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_phone) REFERENCES users(phone) ON DELETE CASCADE
             )
         """)
+        # Добавляем sticker_data если не существует
+        col_exists = await conn.fetchval("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.columns
+                WHERE table_name = 'stickers' AND column_name = 'sticker_data'
+            )
+        """)
+        if not col_exists:
+            await conn.execute("ALTER TABLE stickers ADD COLUMN sticker_data BYTEA")
+            logger.info("Added sticker_data column")
+
+        # Мигрируем старые data:URI стикеры в BYTEA
+        import base64 as _b64m
+        old_uris = await conn.fetch(
+            "SELECT id, sticker_url FROM stickers WHERE sticker_url LIKE 'data:%' AND sticker_data IS NULL LIMIT 500"
+        )
+        migrated = 0
+        for row in old_uris:
+            try:
+                header, b64data = row['sticker_url'].split(',', 1)
+                raw = _b64m.b64decode(b64data)
+                new_id = row['id']
+                await conn.execute(
+                    "UPDATE stickers SET sticker_data = $1, sticker_url = $2 WHERE id = $3",
+                    raw, f"/sticker-data/{new_id}", new_id
+                )
+                migrated += 1
+            except Exception:
+                pass
+        if migrated:
+            logger.info(f"Migrated {migrated} data:URI stickers to BYTEA")
 
             # Таблица реакций
         await conn.execute("""
@@ -504,7 +536,14 @@ async def get_stickers(phone: str):
         
         await conn.close()
         
-        return {"stickers": [{"id": s['id'], "url": s['sticker_url']} for s in stickers]}
+        result = []
+        for s in stickers:
+            url = s['sticker_url']
+            # Если sticker_url это data URI — заменяем на /sticker-data/{id}
+            if url.startswith('data:'):
+                url = f"/sticker-data/{s['id']}"
+            result.append({"id": s['id'], "url": url})
+        return {"stickers": result}
         
     except Exception as e:
         logger.error(f"Error getting stickers: {e}")
@@ -662,13 +701,16 @@ async def import_sticker_pack(phone: str, request: Request):
                     continue
 
                 step = f"sticker_{i}_save"
-                import base64 as _b64
-                mime     = "image/webp" if file_path.endswith(".webp") else "image/png"
-                data_uri = f"data:{mime};base64,{_b64.b64encode(content).decode('ascii')}"
-
+                # Сохраняем бинарные данные в БД, url = /sticker-data/{id}
+                ext = ".webp" if file_path.endswith(".webp") else ".png"
+                row = await conn.fetchrow(
+                    """INSERT INTO stickers (user_phone, sticker_url, sticker_data)
+                       VALUES ($1, $2, $3) RETURNING id""",
+                    phone, f"pending", bytes(content)
+                )
                 await conn.execute(
-                    "INSERT INTO stickers (user_phone, sticker_url) VALUES ($1, $2)",
-                    phone, data_uri
+                    "UPDATE stickers SET sticker_url = $1 WHERE id = $2",
+                    f"/sticker-data/{row['id']}", row['id']
                 )
                 saved += 1
                 logger.info(f"TG saved sticker {i}")
@@ -687,6 +729,30 @@ async def import_sticker_pack(phone: str, request: Request):
         return JSONResponse(status_code=500, content={"error": str(e), "step": step})
 
 # ============= ПОИСК =============
+
+@app.get("/sticker-data/{sticker_id}")
+async def get_sticker_data(sticker_id: int):
+    """Отдаём файл стикера из БД (для Render где диск эфемерный)."""
+    try:
+        conn = await get_db()
+        row = await conn.fetchrow(
+            "SELECT sticker_data, sticker_url FROM stickers WHERE id = $1", sticker_id
+        )
+        await conn.close()
+        if not row:
+            return JSONResponse(status_code=404, content={"error": "Not found"})
+        if row['sticker_data']:
+            # Есть данные в БД — отдаём напрямую
+            from fastapi.responses import Response
+            ext = row['sticker_url'].rsplit('.', 1)[-1].lower()
+            mime = "image/webp" if ext == "webp" else "image/png"
+            return Response(content=bytes(row['sticker_data']), media_type=mime)
+        else:
+            # Старый стикер — редиректим на файл
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url=row['sticker_url'])
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.post("/search")
 async def search_user(data: SearchUser):
