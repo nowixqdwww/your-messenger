@@ -49,7 +49,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/messenger")
 
 # ═══ Вставьте сюда токен вашего Telegram-бота ═══════════════════════════
 # Получить: https://t.me/BotFather → /newbot → скопировать токен
-TG_BOT_TOKEN = "8636203630:AAEOehs3Q-UfKHgMfqSvXmVwcsOzFcS6z8o"
+TG_BOT_TOKEN = "ВСТАВЬТЕ_ТОКЕН_СЮДА"
 # ════════════════════════════════════════════════════════════════════════
 
 async def get_db():
@@ -499,12 +499,12 @@ async def get_stickers(phone: str):
         conn = await get_db()
         
         stickers = await conn.fetch("""
-            SELECT sticker_url FROM stickers WHERE user_phone = $1
+            SELECT id, sticker_url FROM stickers WHERE user_phone = $1 ORDER BY created_at DESC
         """, phone)
         
         await conn.close()
         
-        return {"stickers": [s['sticker_url'] for s in stickers]}
+        return {"stickers": [{"id": s['id'], "url": s['sticker_url']} for s in stickers]}
         
     except Exception as e:
         logger.error(f"Error getting stickers: {e}")
@@ -547,7 +547,20 @@ def _tg_download(url: str) -> bytes:
 # Алиас
 _tg_download_file = _tg_download
 
-@app.post("/import-sticker-pack/{phone}")
+@app.delete("/stickers/{phone}/all")
+async def clear_all_stickers(phone: str):
+    """Удалить все стикеры пользователя (для сброса битых записей)."""
+    try:
+        conn = await get_db()
+        deleted = await conn.fetchval(
+            "DELETE FROM stickers WHERE user_phone = $1 RETURNING COUNT(*)", phone
+        )
+        await conn.close()
+        return {"ok": True, "deleted": deleted}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
 async def import_sticker_pack(phone: str, request: Request):
     """Импорт стикер-пака из Telegram по ссылке или имени пака."""
     step = "init"
@@ -640,12 +653,21 @@ async def import_sticker_pack(phone: str, request: Request):
                 file_path = fdata["result"]["file_path"]
                 dl_url    = f"{tg_file}/{file_path}"
 
-                # Сохраняем прямой URL Telegram CDN — файловая система Render эфемерна
-                # URL вида https://api.telegram.org/file/botTOKEN/stickers/file_X.webp
+                # Скачиваем файл и сохраняем как base64 data URI в БД
+                # (файловая система Render эфемерна — после деплоя файлы теряются)
+                step = f"sticker_{i}_download"
+                content = await loop.run_in_executor(None, _tg_download_file, dl_url)
+                if not content:
+                    continue
+
                 step = f"sticker_{i}_save"
+                import base64 as _b64
+                mime     = "image/webp" if file_path.endswith(".webp") else "image/png"
+                data_uri = f"data:{mime};base64,{_b64.b64encode(content).decode('ascii')}"
+
                 await conn.execute(
                     "INSERT INTO stickers (user_phone, sticker_url) VALUES ($1, $2)",
-                    phone, dl_url
+                    phone, data_uri
                 )
                 saved += 1
                 logger.info(f"TG saved sticker {i}")
