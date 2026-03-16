@@ -961,14 +961,19 @@ async function loadStickers() {
         const res = await fetch(`/stickers/${currentUser}`)
         if (res.ok) {
             const data = await res.json()
+            const raw = data.stickers || []
+            console.log(`[stickers] total=${raw.length}, first=`, raw[0])
             // Нормализуем: принимаем [{id,url}] и [url] и [string]
-            userStickers = (data.stickers || []).map(s =>
+            userStickers = raw.map(s =>
                 typeof s === 'string' ? { id: null, url: s } : { id: s.id || null, url: s.url || s.sticker_url || s }
             )
+            console.log(`[stickers] normalized first=`, userStickers[0])
             renderStickers()
+        } else {
+            console.error('[stickers] fetch failed', res.status)
         }
     } catch (error) {
-        console.error('Error loading stickers:', error)
+        console.error('[stickers] Error loading stickers:', error)
     }
 }
 
@@ -1059,6 +1064,7 @@ function renderStickers() {
                 img.src = url
                 img.alt = 'sticker'
                 img.loading = 'lazy'
+                img.onerror = () => { console.warn('[sticker] failed to load:', url); img.style.opacity='0.3' }
                 div.appendChild(img)
 
                 // Кнопка удаления
