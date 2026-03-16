@@ -963,34 +963,42 @@ body {
 
 /* Модальное окно стикеров (вылезающее) */
 .sticker-modal {
-    position: absolute;
+    position: fixed;
     bottom: 80px;
-    right: 10px;
-    width: 350px;
-    max-width: calc(100vw - 30px);
+    right: 12px;
+    width: 340px;
+    max-width: calc(100vw - 20px);
+    /* Ограничиваем высоту чтобы не выходить за экран */
+    max-height: calc(100vh - 100px);
     background: white;
-    border-radius: 15px;
+    border-radius: 16px;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-    z-index: 1000;
+    z-index: 1100;
     opacity: 0;
-    transform: scale(0.9);
+    transform: scale(0.9) translateY(8px);
     transform-origin: bottom right;
     transition: opacity 0.2s, transform 0.2s;
     pointer-events: none;
     visibility: hidden;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .sticker-modal.show {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(1) translateY(0);
     pointer-events: all;
     visibility: visible;
 }
 
 .sticker-modal-content {
     width: 100%;
-    border-radius: 15px;
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
+    max-height: calc(100vh - 100px);
 }
 
 .sticker-modal-header {
@@ -1030,6 +1038,10 @@ body {
 
 .sticker-modal-body {
     padding: 12px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    flex: 1;
+    min-height: 0;
 }
 
 /* Вкладки стикеров */
@@ -1863,6 +1875,9 @@ body {
         right: 5px;
         left: 5px;
         width: auto;
+        max-width: none;
+        max-height: 60vh;
+        transform-origin: bottom center;
     }
     
     .sticker-grid {
