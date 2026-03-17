@@ -2524,3 +2524,15 @@ body {
     height: 1px;
     background: #e5e5e5;
 }
+
+/* Время и галочки под стикером */
+.sticker-meta {
+    justify-content: flex-end;
+    margin-top: 3px;
+    opacity: 0.75;
+}
+.message.sticker.me  .sticker-meta { justify-content: flex-end; }
+.message.sticker.other .sticker-meta { justify-content: flex-end; }
+.message.sticker .message-time { color: #555; font-size: 11px; }
+.message.sticker.me .msg-ticks .fa-check { color: rgba(0,0,0,0.45); }
+.message.sticker.me .msg-ticks.read .fa-check { color: #2AABEE; }
