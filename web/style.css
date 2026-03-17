@@ -2560,3 +2560,25 @@ body {
 }
 
 /* sticker-meta defined above */
+
+/* Галочки поверх стикера */
+.message.sticker { position: relative; }
+.sticker-ticks {
+    position: absolute;
+    bottom: 6px;
+    right: 8px;
+    width: 16px;
+    height: 11px;
+    display: inline-flex;
+    align-items: center;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
+}
+.sticker-ticks .fa-check {
+    font-size: 9px;
+    position: absolute;
+    color: white;
+}
+.sticker-ticks .fa-check:first-child { left: 0; }
+.sticker-ticks .tick-second { left: 5px; opacity: 0; }
+.sticker-ticks.read .fa-check { color: #4fc3f7; }
+.sticker-ticks.read .tick-second { opacity: 1; }
