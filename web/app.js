@@ -1154,15 +1154,13 @@ function addMessage(user, text, messageId = null, isRead = false) {
         img.alt = 'sticker'
         div.appendChild(img)
 
-        // Время + галочки под стикером
-        const time = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
-        const ticks = isMe
-            ? `<span class="msg-ticks${isRead ? ' read' : ''}"><i class="fas fa-check"></i><i class="fas fa-check tick-second"></i></span>`
-            : ''
-        const meta = document.createElement('div')
-        meta.className = 'message-meta sticker-meta'
-        meta.innerHTML = `<span class="message-time">${time}</span>${ticks}`
-        div.appendChild(meta)
+        // Галочки поверх стикера (только для своих)
+        if (isMe) {
+            const ticks = document.createElement('span')
+            ticks.className = `msg-ticks sticker-ticks${isRead ? ' read' : ''}`
+            ticks.innerHTML = '<i class="fas fa-check"></i><i class="fas fa-check tick-second"></i>'
+            div.appendChild(ticks)
+        }
 
         // Кнопка реакции
         if (messageId) {
@@ -2377,11 +2375,19 @@ document.getElementById('text').addEventListener('input', () => {
 
 // ============= ОБРАБОТЧИКИ СОБЫТИЙ =============
 
-document.addEventListener('click', hideContextMenus)
-document.addEventListener('touchstart', hideContextMenus)
+// Скрываем меню только если клик/тач НЕ внутри самого меню
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.context-menu')) hideContextMenus()
+})
+document.addEventListener('touchend', (e) => {
+    if (!e.target.closest('.context-menu') && !e.target.closest('.message')) {
+        setTimeout(() => hideContextMenus(), 150)
+    }
+})
 
 document.addEventListener('contextmenu', (e) => {
-    if (hasClass(e.target, 'message') || hasClass(e.target, 'chatItem')) {
+    // Блокируем системное меню на сообщениях и чатах
+    if (e.target.closest('.message') || e.target.closest('.chatItem')) {
         e.preventDefault()
     }
 })
