@@ -156,12 +156,30 @@
             <!-- Ввод сообщения -->
             <div class="input-area">
                 <button onclick="toggleStickerModal()" class="sticker-btn" id="stickerBtn">
-                    <i class="fas fa-sticky-note"></i>
+                    <i class="fas fa-face-smile"></i>
                 </button>
                 <input id="text" placeholder="Напишите сообщение..." class="message-input">
-                <button onclick="send()" class="send-btn">
+                <button class="voice-btn" id="voiceBtn"
+                    onmousedown="startVoice(event)" onmouseup="stopVoice(event)" onmouseleave="stopVoice(event)"
+                    ontouchstart="startVoice(event)" ontouchend="stopVoice(event)" ontouchcancel="cancelVoice()">
+                    <i class="fas fa-microphone"></i>
+                </button>
+                <button onclick="send()" class="send-btn" id="sendBtn">
                     <i class="fas fa-paper-plane"></i>
                 </button>
+            </div>
+            <!-- Индикатор записи -->
+            <div class="voice-recording-bar" id="voiceRecordingBar" style="display:none;">
+                <span class="voice-rec-dot"></span>
+                <span class="voice-rec-time" id="voiceRecTime">0:00</span>
+                <span class="voice-rec-hint">Отпустите для отправки</span>
+                <button class="voice-cancel-btn" onclick="cancelVoice()"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div class="voice-recording-bar" id="voiceRecordingBar" style="display:none;">
+                <div class="voice-rec-dot"></div>
+                <span class="voice-rec-time" id="voiceRecTime">0:00</span>
+                <span class="voice-rec-hint">Отпустите чтобы отправить · Смахните чтобы отменить</span>
+                <button class="voice-rec-cancel" onclick="cancelVoiceRecord()">✕</button>
             </div>
         </div>
     </div>
@@ -468,6 +486,21 @@
             </div>
 
             <div class="settings-section">
+                <h3><i class="fas fa-microphone"></i> Голосовые сообщения</h3>
+
+                <div class="settings-item">
+                    <div class="settings-item-info">
+                        <div class="settings-item-title">Режим записи</div>
+                        <div class="settings-item-description">Как активировать запись голосового</div>
+                    </div>
+                    <select id="voiceMode" class="settings-select" onchange="saveVoiceMode()">
+                        <option value="hold">Зажать кнопку</option>
+                        <option value="tap">Нажать — начало / снова — конец</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="settings-section">
                 <h3><i class="fas fa-database"></i> Данные и хранилище</h3>
                 
                 <div class="settings-item">
@@ -591,6 +624,9 @@
 
 <!-- Контекстное меню для сообщений -->
 <div id="messageContextMenu" class="context-menu" style="display: none;">
+    <div class="context-menu-item" onclick="addReactionFromMenu()">
+        <i class="fas fa-face-smile"></i> Реакция
+    </div>
     <div class="context-menu-item" onclick="forwardMessage()">
         <i class="fas fa-share"></i> Переслать
     </div>
