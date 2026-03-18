@@ -2592,8 +2592,9 @@ body {
     color: #667eea;
     font-size: 22px;
     cursor: pointer;
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -2601,12 +2602,16 @@ body {
     flex-shrink: 0;
     transition: background 0.15s, transform 0.15s;
     position: relative;
-    z-index: 1;
+    z-index: 2;
     -webkit-tap-highlight-color: transparent;
-    touch-action: none;
+    touch-action: manipulation;
     user-select: none;
+    -webkit-user-select: none;
+    /* Увеличиваем зону нажатия */
+    padding: 4px;
 }
-.voice-btn:hover { background: rgba(102,126,234,0.1); }
+.voice-btn:hover  { background: rgba(102,126,234,0.12); }
+.voice-btn:active { transform: scale(0.92); }
 .voice-btn.recording {
     background: rgba(255,59,48,0.15);
     color: #ff3b30;
