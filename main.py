@@ -875,11 +875,25 @@ async def get_voice(voice_id: int):
         raw = row["voice_data"]
         if not raw:
             return JSONResponse(status_code=404, content={"error": "No audio data"})
+        data = bytes(raw)
+        # Определяем MIME по magic bytes
+        if data[:4] == b'OggS':
+            mime = "audio/ogg"
+        elif data[:4] == b'RIFF':
+            mime = "audio/wav"
+        elif data[4:8] == b'ftyp':
+            mime = "audio/mp4"
+        else:
+            mime = "audio/webm"
         from fastapi.responses import Response
         return Response(
-            content=bytes(raw),
-            media_type="audio/webm",
-            headers={"Cache-Control": "public, max-age=86400"}
+            content=data,
+            media_type=mime,
+            headers={
+                "Cache-Control": "public, max-age=86400",
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(len(data)),
+            }
         )
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
