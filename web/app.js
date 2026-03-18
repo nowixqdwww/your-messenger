@@ -1541,6 +1541,7 @@ function updateVoiceBtnBehavior() {
 let voiceAnalyser = null
 let voiceWaveAnim = null
 let voiceStream   = null
+let voiceAudioCtx = null
 
 function showRecordArea() {
     const inputArea  = document.getElementById('inputArea')
@@ -1595,9 +1596,11 @@ async function startVoiceRecord(e) {
 
         // Web Audio API — реальная амплитуда
         try {
-            const ctx = new AudioContext()
-            const source = ctx.createMediaStreamSource(voiceStream)
-            voiceAnalyser = ctx.createAnalyser()
+            // Закрываем предыдущий контекст если есть
+            if (voiceAudioCtx) { voiceAudioCtx.close(); voiceAudioCtx = null }
+            voiceAudioCtx = new AudioContext()
+            const source = voiceAudioCtx.createMediaStreamSource(voiceStream)
+            voiceAnalyser = voiceAudioCtx.createAnalyser()
             voiceAnalyser.fftSize = 128
             source.connect(voiceAnalyser)
         } catch (_) {}
@@ -1680,6 +1683,7 @@ function startWaveAnimation() {
 function stopWaveAnimation() {
     if (voiceWaveAnim) { cancelAnimationFrame(voiceWaveAnim); voiceWaveAnim = null }
     voiceAnalyser = null
+    if (voiceAudioCtx) { voiceAudioCtx.close(); voiceAudioCtx = null }
 }
 
 
