@@ -2835,3 +2835,103 @@ body {
     0%, 100% { opacity: 0.4; }
     50%       { opacity: 1; }
 }
+
+/* ── Зона ввода / записи ── */
+.input-wrap {
+    position: relative;
+    overflow: hidden;
+}
+
+/* Строка ввода — анимация скрытия */
+#inputArea {
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+#inputArea.input-hidden {
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+    position: absolute;
+    width: 100%;
+}
+
+/* Строка записи */
+.voice-record-area {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    height: 56px;
+    opacity: 0;
+    transform: translateY(-8px);
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    position: absolute;
+    width: 100%;
+    box-sizing: border-box;
+}
+.voice-record-area.record-visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: all;
+    position: relative;
+}
+
+/* Кнопка отмены записи */
+.voice-cancel-btn {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255,59,48,0.1);
+    color: #ff3b30;
+    font-size: 15px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.15s, transform 0.15s;
+}
+.voice-cancel-btn:hover  { background: rgba(255,59,48,0.2); }
+.voice-cancel-btn:active { transform: scale(0.9); }
+
+/* Волна в строке записи */
+.voice-record-wave {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: 36px;
+    overflow: hidden;
+}
+.vrec-bar {
+    flex: 1;
+    border-radius: 2px;
+    background: #667eea;
+    min-height: 3px;
+    transition: height 0.06s ease;
+}
+
+/* Таймер в строке записи */
+.voice-record-area .voice-rec-time {
+    font-size: 15px;
+    font-weight: 600;
+    color: #ff3b30;
+    min-width: 38px;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+/* Кнопка отправки в строке записи */
+.voice-send-btn {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    border: none;
+    background: #667eea;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: transform 0.15s, background 0.15s;
+    box-shadow: 0 2px 8px rgba(102,126,234,0.4);
+}
+.voice-send-btn:hover  { background: #5568d9; transform: scale(1.05); }
+.voice-send-btn:active { transform: scale(0.92); }
