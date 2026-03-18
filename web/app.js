@@ -1487,7 +1487,7 @@ let voiceStartTime = null
 let voiceTimer = null
 let voiceCancelled = false
 let voiceTouchStartX = 0
-let voiceMode = localStorage.getItem('voiceMode') || 'hold'  // 'hold' | 'tap'
+let voiceMode = localStorage.getItem('voiceMode') || 'tap'  // 'tap' | 'hold'
 let voiceTapActive = false  // для режима tap
 
 function saveVoiceMode() {
@@ -1508,23 +1508,45 @@ function loadVoiceModeSetting() {
 function updateVoiceBtnBehavior() {
     const btn = document.getElementById('voiceBtn')
     if (!btn) return
+
+    // Сбрасываем все обработчики
+    btn.onmousedown = btn.onmouseup = btn.onmouseleave = null
+    btn.ontouchstart = btn.ontouchend = btn.ontouchcancel = null
+    btn.onclick = null
+
+    // Используем Pointer Events — работают одинаково на мышке и тачскрине
+    // Удаляем старые листенеры через замену элемента
+    const newBtn = btn.cloneNode(true)
+    btn.parentNode.replaceChild(newBtn, btn)
+    const b = newBtn
+
     if (voiceMode === 'hold') {
-        btn.onmousedown   = (e) => startVoiceRecord(e)
-        btn.onmouseup     = (e) => stopVoiceRecord(e)
-        btn.onmouseleave  = (e) => stopVoiceRecord(e)
-        btn.ontouchstart  = (e) => { e.preventDefault(); startVoiceRecord(e) }
-        btn.ontouchend    = (e) => stopVoiceRecord(e)
-        btn.ontouchcancel = () => cancelVoiceRecord()
-        btn.onclick       = null
-        btn.title = 'Зажать для записи'
+        b.title = 'Зажать и держать для записи'
+        b.style.cursor = 'grab'
+        b.addEventListener('pointerdown', (e) => {
+            e.preventDefault()
+            b.setPointerCapture(e.pointerId)
+            startVoiceRecord(e)
+        })
+        b.addEventListener('pointerup', (e) => {
+            e.preventDefault()
+            stopVoiceRecord(e)
+        })
+        b.addEventListener('pointercancel', () => cancelVoiceRecord())
     } else {
-        btn.onmousedown   = null
-        btn.onmouseup     = null
-        btn.onmouseleave  = null
-        btn.ontouchstart  = null
-        btn.ontouchend    = null
-        btn.ontouchcancel = null
-        btn.onclick = () => {
+        b.title = 'Нажать для начала/конца записи'
+        b.style.cursor = 'pointer'
+        b.addEventListener('pointerdown', (e) => {
+            e.preventDefault()
+            b.setPointerCapture(e.pointerId)
+        })
+        b.addEventListener('pointerup', (e) => {
+            e.preventDefault()
+            // Проверяем что pointer был на кнопке при отпускании
+            const rect = b.getBoundingClientRect()
+            const inside = e.clientX >= rect.left && e.clientX <= rect.right
+                        && e.clientY >= rect.top  && e.clientY <= rect.bottom
+            if (!inside) return
             if (!voiceTapActive) {
                 voiceTapActive = true
                 startVoiceRecord(null)
@@ -1532,8 +1554,7 @@ function updateVoiceBtnBehavior() {
                 voiceTapActive = false
                 commitVoice()
             }
-        }
-        btn.title = 'Нажать для начала/конца записи'
+        })
     }
 }
 
@@ -1598,6 +1619,12 @@ async function startVoiceRecord(e) {
         mediaRecorder.onstop = () => {
             if (voiceStream) { voiceStream.getTracks().forEach(t => t.stop()); voiceStream = null }
             stopWaveAnimation()
+            voiceTapActive = false
+            const vBtn = document.getElementById('voiceBtn')
+            if (vBtn) {
+                vBtn.classList.remove('recording')
+                vBtn.querySelector('i').className = 'fas fa-microphone'
+            }
             if (!voiceCancelled) sendVoiceMessage()
         }
         mediaRecorder.start(100)
@@ -1615,6 +1642,14 @@ async function startVoiceRecord(e) {
 
         voiceStartTime = Date.now()
         showRecordArea()
+        // Меняем иконку микрофона на стоп в tap-режиме
+        const vBtn = document.getElementById('voiceBtn')
+        if (vBtn) {
+            vBtn.classList.add('recording')
+            vBtn.querySelector('i').className = voiceMode === 'tap'
+                ? 'fas fa-stop'
+                : 'fas fa-microphone'
+        }
         if (navigator.vibrate) navigator.vibrate(40)
         startWaveAnimation()
 
@@ -1657,6 +1692,7 @@ function commitVoice() {
 
 function cancelVoiceRecord() {
     voiceCancelled = true
+    voiceTapActive = false
     clearInterval(voiceTimer)
     if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop()
     else {
@@ -1665,6 +1701,12 @@ function cancelVoiceRecord() {
     }
     hideRecordArea()
     voiceChunks = []
+    // Восстанавливаем иконку кнопки
+    const vBtn = document.getElementById('voiceBtn')
+    if (vBtn) {
+        vBtn.classList.remove('recording')
+        vBtn.querySelector('i').className = 'fas fa-microphone'
+    }
     if (navigator.vibrate) navigator.vibrate([20, 20])
 }
 
@@ -1903,10 +1945,18 @@ function createVoicePlayer(url, isMe, duration) {
 
     // Сбрасываем состояние если audio сам остановился с ошибкой
     audio.addEventListener('error', (e) => {
-        console.error('Audio error:', audio.error?.code, audio.error?.message, 'url:', url)
+        const code = audio.error?.code
         playing = false
         playBtn.innerHTML = '<i class="fas fa-play"></i>'
-        showToast('Не удалось загрузить аудио (код ' + (audio.error?.code || '?') + ')')
+        if (code === 4) {
+            // Повреждённый файл (старая запись) — показываем иконку
+            playBtn.innerHTML = '<i class="fas fa-triangle-exclamation" style="color:#ff9500;font-size:12px;"></i>'
+            playBtn.title = 'Запись повреждена'
+            playBtn.disabled = true
+        } else {
+            console.error('Audio error:', code, audio.error?.message, 'url:', url)
+            showToast('Не удалось воспроизвести аудио')
+        }
     })
 
     wrap._audio = audio
