@@ -1536,6 +1536,10 @@ function updateVoiceBtnBehavior() {
     }
 }
 
+// Аудио-анализатор для визуализации волны
+let voiceAnalyser = null
+let voiceWaveAnim = null
+
 async function startVoiceRecord(e) {
     if (e) e.preventDefault()
     if (!currentChat) { showToast('Выберите чат'); return }
@@ -1554,9 +1558,20 @@ async function startVoiceRecord(e) {
         mediaRecorder.ondataavailable = e => { if (e.data.size > 0) voiceChunks.push(e.data) }
         mediaRecorder.onstop = () => {
             stream.getTracks().forEach(t => t.stop())
+            stopWaveAnimation()
             if (!voiceCancelled) sendVoiceMessage()
         }
         mediaRecorder.start(100)
+
+        // Аудио-анализатор для реальной волны
+        try {
+            const ctx = new AudioContext()
+            const source = ctx.createMediaStreamSource(stream)
+            voiceAnalyser = ctx.createAnalyser()
+            voiceAnalyser.fftSize = 64
+            source.connect(voiceAnalyser)
+            startWaveAnimation()
+        } catch (_) { /* браузер без Web Audio API */ }
 
         voiceStartTime = Date.now()
         document.getElementById('voiceRecordingBar').style.display = 'flex'
@@ -1574,6 +1589,49 @@ async function startVoiceRecord(e) {
         showToast('Нет доступа к микрофону')
         console.error('Voice record error:', err)
     }
+}
+
+function startWaveAnimation() {
+    const bar = document.getElementById('voiceRecordingBar')
+    // Создаём мини-волну в баре если её нет
+    let wave = bar.querySelector('.rec-wave')
+    if (!wave) {
+        wave = document.createElement('div')
+        wave.className = 'rec-wave'
+        for (let i = 0; i < 20; i++) {
+            const b = document.createElement('div')
+            b.className = 'rec-wave-bar'
+            wave.appendChild(b)
+        }
+        // Вставляем после таймера
+        const time = bar.querySelector('.voice-rec-time')
+        if (time && time.nextSibling) bar.insertBefore(wave, time.nextSibling)
+        else bar.appendChild(wave)
+    }
+
+    const bars = wave.querySelectorAll('.rec-wave-bar')
+    const dataArr = voiceAnalyser ? new Uint8Array(voiceAnalyser.frequencyBinCount) : null
+
+    function draw() {
+        voiceWaveAnim = requestAnimationFrame(draw)
+        bars.forEach((b, i) => {
+            let h
+            if (dataArr && voiceAnalyser) {
+                voiceAnalyser.getByteFrequencyData(dataArr)
+                h = Math.max(15, (dataArr[i % dataArr.length] / 255) * 100)
+            } else {
+                // Фолбэк — случайная анимация
+                h = 15 + Math.random() * 85
+            }
+            b.style.height = h + '%'
+        })
+    }
+    draw()
+}
+
+function stopWaveAnimation() {
+    if (voiceWaveAnim) { cancelAnimationFrame(voiceWaveAnim); voiceWaveAnim = null }
+    voiceAnalyser = null
 }
 
 function stopVoiceRecord(e) {
@@ -1612,6 +1670,26 @@ async function sendVoiceMessage() {
     const blob = new Blob(voiceChunks, { type: mediaRecorder.mimeType })
     const duration = Math.round((Date.now() - voiceStartTime) / 1000)
 
+    // Показываем плейсхолдер сразу — пользователь видит что отправка идёт
+    const messagesDiv = document.getElementById('messages')
+    const placeholder = document.createElement('div')
+    placeholder.className = 'message voice-message me voice-sending'
+    placeholder.innerHTML = `
+        <div class="voice-player">
+            <button class="voice-play-btn" disabled><i class="fas fa-spinner fa-spin"></i></button>
+            <div class="voice-wave-wrap">
+                <div class="voice-wave-bars">
+                    ${Array.from({length: 20}, () =>
+                        `<div class="voice-wave-bar" style="height:${15+Math.random()*85}%"></div>`
+                    ).join('')}
+                </div>
+                <div class="voice-progress-bar"><div class="voice-progress-fill"></div></div>
+            </div>
+            <span class="voice-time">${Math.floor(duration/60)}:${(duration%60).toString().padStart(2,'0')}</span>
+        </div>`
+    messagesDiv.appendChild(placeholder)
+    messagesDiv.scrollTop = messagesDiv.scrollHeight
+
     try {
         const res = await fetch('/api/voice/upload', {
             method: 'POST',
@@ -1623,13 +1701,24 @@ async function sendVoiceMessage() {
             body: blob
         })
         const data = await res.json()
-        if (!res.ok) { showToast(data.error || 'Ошибка отправки'); return }
+
+        if (!res.ok) {
+            placeholder.remove()
+            showToast(data.error || 'Ошибка отправки')
+            return
+        }
+
+        // Убираем плейсхолдер — message_sent от сервера добавит настоящее
+        placeholder.style.transition = 'opacity 0.2s'
+        placeholder.style.opacity = '0'
+        setTimeout(() => placeholder.remove(), 200)
 
         const voiceText = `[VOICE:${duration}]/api/voice/${data.voice_id}[/VOICE]`
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ action: 'send', to: currentChat, text: voiceText }))
         }
     } catch (err) {
+        placeholder.remove()
         console.error('Send voice error:', err)
         showToast('Ошибка отправки')
     }
