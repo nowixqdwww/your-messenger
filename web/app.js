@@ -3396,7 +3396,7 @@ function createVideoPlayer(url, isMe) {
 
     // Кнопка Play
     const playBtn = document.createElement('button')
-    playBtn.style.cssText = 'position:absolute;inset:0;margin:auto;width:48px;height:48px;border-radius:50%;background:rgba(0,0,0,0.55);color:white;border:none;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);z-index:3'
+    playBtn.style.cssText = 'position:absolute;inset:0;margin:auto;width:48px;height:48px;border-radius:50%;background:rgba(0,0,0,0.55);color:white;border:none;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);z-index:3;transition:opacity 0.2s'
     playBtn.innerHTML = '<i class="fas fa-play"></i>'
 
     // Таймер
@@ -3425,23 +3425,42 @@ function createVideoPlayer(url, isMe) {
         video.currentTime = 0
         fillC.setAttribute('stroke-dashoffset', String(circ))
         if (isFinite(video.duration)) timeEl.textContent = fmt(video.duration)
+        showPlayBtn()
     })
     video.addEventListener('error', () => {
         playBtn.innerHTML = '<i class="fas fa-exclamation-triangle" style="color:#ff9500;font-size:12px"></i>'
         playBtn.disabled = true
     })
 
+    function showPlayBtn() { playBtn.style.opacity = '1'; playBtn.style.pointerEvents = 'auto' }
+    function hidePlayBtn() { playBtn.style.opacity = '0'; playBtn.style.pointerEvents = 'none' }
+
     playBtn.onclick = (e) => {
         e.stopPropagation()
         if (playing) {
-            video.pause()
+            video.pause(); playing = false
             playBtn.innerHTML = '<i class="fas fa-play"></i>'
+            showPlayBtn()
         } else {
             video.play().catch(() => showToast('Ошибка воспроизведения'))
+            playing = true
             playBtn.innerHTML = '<i class="fas fa-pause"></i>'
+            hidePlayBtn()
         }
-        playing = !playing
     }
+
+    // Клик на кружок — показать/скрыть кнопку
+    outer.addEventListener('click', (e) => {
+        if (e.target === playBtn || e.target.closest('button')) return
+        if (playing) {
+            // Показываем на 2 сек потом прячем
+            showPlayBtn()
+            clearTimeout(outer._hideTimer)
+            outer._hideTimer = setTimeout(hidePlayBtn, 2000)
+        } else {
+            showPlayBtn()
+        }
+    })
 
     // Перемотка drag по SVG кольцу
     svg.style.pointerEvents = 'auto'
