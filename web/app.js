@@ -3180,6 +3180,9 @@ function retakeVideo() {
 
 async function sendVideoMessage() {
     if (!videoBlob || !currentChat) return
+    // Сохраняем до closeVideoRecorder который обнуляет эти переменные
+    const blobToSend = videoBlob
+    const chatTo = currentChat
     const duration = Math.round((Date.now() - videoStartTime) / 1000)
     closeVideoRecorder()
 
@@ -3199,11 +3202,11 @@ async function sendVideoMessage() {
         const res = await fetch('/api/video/upload', {
             method: 'POST',
             headers: {
-                'Content-Type': videoBlob.type || 'video/webm',
+                'Content-Type': blobToSend.type || 'video/webm',
                 'X-Sender': currentUser,
                 'X-Duration': String(duration)
             },
-            body: videoBlob
+            body: blobToSend
         })
         const data = await res.json()
         placeholder.style.opacity = '0'
@@ -3213,7 +3216,7 @@ async function sendVideoMessage() {
 
         const videoText = `[VIDEO:${duration}]/api/video/${data.video_id}[/VIDEO]`
         if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ action: 'send', to: currentChat, text: videoText }))
+            ws.send(JSON.stringify({ action: 'send', to: chatTo, text: videoText }))
         }
     } catch (e) {
         placeholder.remove()
