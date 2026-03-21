@@ -3229,14 +3229,39 @@ function onVideoRecordStop() {
             playback.currentTime = previewAngle(e) * playback.duration
             e.preventDefault()
         }, { passive: false })
+        let pendingPreviewSeek = null
         document.addEventListener('mousemove', (e) => {
             if (!seeking || !playback.duration) return
-            playback.currentTime = previewAngle(e) * playback.duration
+            const pct = previewAngle(e)
+            const circLen2 = 2 * Math.PI * 105
+            if (ring) ring.style.strokeDashoffset = String(circLen2 * (1 - pct))
+            if (pendingPreviewSeek !== null) return
+            pendingPreviewSeek = pct
+            setTimeout(() => {
+                if (playback.duration) {
+                    const t = pendingPreviewSeek * playback.duration
+                    if (playback.fastSeek) playback.fastSeek(t)
+                    else playback.currentTime = t
+                }
+                pendingPreviewSeek = null
+            }, 80)
         })
         document.addEventListener('mouseup', () => { seeking = false })
         document.addEventListener('touchmove', (e) => {
             if (!seeking || !playback.duration) return
-            playback.currentTime = previewAngle(e) * playback.duration
+            const pct = previewAngle(e)
+            const circLen3 = 2 * Math.PI * 105
+            if (ring) ring.style.strokeDashoffset = String(circLen3 * (1 - pct))
+            if (pendingPreviewSeek !== null) return
+            pendingPreviewSeek = pct
+            setTimeout(() => {
+                if (playback.duration) {
+                    const t = pendingPreviewSeek * playback.duration
+                    if (playback.fastSeek) playback.fastSeek(t)
+                    else playback.currentTime = t
+                }
+                pendingPreviewSeek = null
+            }, 80)
         })
         document.addEventListener('touchend', () => { seeking = false })
     }
@@ -3445,9 +3470,26 @@ function createVideoPlayer(url, isMe) {
         scrubbing = true; if (playing) video.pause()
         video.currentTime = getAnglePct(e) * video.duration; updateRing(); e.preventDefault()
     }, { passive: false })
+    let pendingSeek = null
     const onMove = (e) => {
         if (!scrubbing || !video.duration) return
-        video.currentTime = getAnglePct(e) * video.duration; updateRing(); e.preventDefault()
+        e.preventDefault()
+        const pct = getAnglePct(e)
+        // Обновляем кольцо сразу для плавности визуала
+        fillC.setAttribute('stroke-dashoffset', String(circ * (1 - pct)))
+        const left = Math.max(0, video.duration * (1 - pct))
+        timeEl.textContent = fmt(left)
+        // Seek throttle — применяем не чаще 4 раз в секунду
+        if (pendingSeek !== null) return
+        pendingSeek = pct
+        setTimeout(() => {
+            if (video.duration) {
+                const t = pendingSeek * video.duration
+                if (video.fastSeek) video.fastSeek(t)
+                else video.currentTime = t
+            }
+            pendingSeek = null
+        }, 80)
     }
     const onUp = () => { if (!scrubbing) return; scrubbing = false; if (playing) video.play().catch(()=>{}) }
     document.addEventListener('mousemove', onMove)
