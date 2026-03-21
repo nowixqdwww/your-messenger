@@ -2914,7 +2914,7 @@ async function exportData() {
 
 // ============= ИНДИКАТОР ПЕЧАТАНИЯ =============
 
-document.getElementById('text').addEventListener('input', () => {
+document.getElementById('text')?.addEventListener('input', () => {
     if (!currentChat || !ws || ws.readyState !== WebSocket.OPEN) return
     
     clearTimeout(typingTimeout)
@@ -2946,14 +2946,14 @@ document.addEventListener('contextmenu', (e) => {
     }
 })
 
-document.getElementById('text').addEventListener('keypress', (e) => {
+document.getElementById('text')?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault()
         send()
     }
 })
 
-document.getElementById('searchUser').addEventListener('input', (e) => {
+document.getElementById('searchUser')?.addEventListener('input', (e) => {
     const query = e.target.value.trim()
     
     if (searchTimeout) clearTimeout(searchTimeout)
@@ -2968,7 +2968,7 @@ document.getElementById('searchUser').addEventListener('input', (e) => {
     }, 300)
 })
 
-document.getElementById('searchUser').addEventListener('keydown', (e) => {
+document.getElementById('searchUser')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
         e.preventDefault()
         searchExactUser(e.target.value.trim())
