@@ -1839,23 +1839,26 @@ function updateInputButtons() {
 document.addEventListener('DOMContentLoaded', () => {
     updateVoiceBtnBehavior()
     updateInputButtons()
+
+    document.getElementById('text')?.addEventListener('input', updateInputButtons)
+    document.getElementById('videomsgBtn')?.addEventListener('click', () => openVideoRecorder())
+    document.getElementById('voiceBtn')?.addEventListener('mousedown', e => {
+        if (e.button !== 0) return
+        startVoiceRecord(null)
+        const up = () => { stopVoiceRecord(null); document.removeEventListener('mouseup', up) }
+        document.addEventListener('mouseup', up)
+    })
 })
-if (document.readyState !== 'loading') { updateVoiceBtnBehavior(); updateInputButtons() }
-
-document.getElementById('text')?.addEventListener('input', updateInputButtons)
-
-// Кнопка записи видео
-document.getElementById('videomsgBtn')?.addEventListener('click', () => openVideoRecorder())
+if (document.readyState !== 'loading') {
+    updateVoiceBtnBehavior()
+    updateInputButtons()
+    document.getElementById('text')?.addEventListener('input', updateInputButtons)
+    document.getElementById('videomsgBtn')?.addEventListener('click', () => openVideoRecorder())
+}
 
 function updateInputButtonsOLD_REMOVED() {}
 
 // Также на десктопе — зажать кнопку мышью
-document.getElementById('voiceBtn')?.addEventListener('mousedown', e => {
-    if (e.button !== 0) return
-    startVoiceRecord(null)
-    const up = () => { stopVoiceRecord(null); document.removeEventListener('mouseup', up) }
-    document.addEventListener('mouseup', up)
-})
 
 // Плеер голосового сообщения
 function createVoicePlayer(url, isMe, duration) {
