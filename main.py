@@ -189,7 +189,18 @@ async def init_db():
         except Exception:
             pass
 
-            # Таблица реакций
+            # Таблица видео сообщений
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS video_messages (
+                id SERIAL PRIMARY KEY,
+                sender TEXT NOT NULL,
+                video_data BYTEA NOT NULL,
+                duration INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Таблица реакций
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS reactions (
                 id SERIAL PRIMARY KEY,
@@ -905,6 +916,57 @@ async def get_voice(voice_id: int):
         )
     except Exception as e:
         logger.error(f"Voice {voice_id} error: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+# ============= ВИДЕО СООБЩЕНИЯ =============
+
+@app.post("/api/video/upload")
+async def upload_video(request: Request):
+    try:
+        body = await request.body()
+        sender = request.headers.get("X-Sender", "")
+        duration = int(request.headers.get("X-Duration", "0"))
+        if not body or not sender:
+            return JSONResponse(status_code=400, content={"error": "No data"})
+        if len(body) > 50 * 1024 * 1024:
+            return JSONResponse(status_code=400, content={"error": "Файл слишком большой (макс 50MB)"})
+
+        conn = await get_db()
+        try:
+            row = await conn.fetchrow("""
+                INSERT INTO video_messages (sender, video_data, duration)
+                VALUES ($1, $2, $3) RETURNING id
+            """, sender, bytes(body), duration)
+        finally:
+            await conn.close()
+
+        logger.info(f"Video upload: sender={sender} size={len(body)} duration={duration}s id={row['id']}")
+        return {"ok": True, "video_id": row["id"]}
+    except Exception as e:
+        logger.error(f"video upload error: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.get("/api/video/{video_id}")
+async def get_video(video_id: int):
+    try:
+        conn = await get_db()
+        row = await conn.fetchrow("SELECT video_data, duration FROM video_messages WHERE id = $1", video_id)
+        await conn.close()
+        if not row or not row["video_data"]:
+            return JSONResponse(status_code=404, content={"error": "Not found"})
+        data = bytes(row["video_data"])
+        # Определяем MIME
+        if len(data) > 8 and data[4:8] in (b'ftyp', b'mdat', b'moov'):
+            mime = "video/mp4"
+        else:
+            mime = "video/webm"
+        from fastapi.responses import Response
+        return Response(
+            content=data,
+            media_type=mime,
+            headers={"Cache-Control": "public, max-age=86400", "Accept-Ranges": "bytes", "Content-Length": str(len(data))}
+        )
+    except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.post("/search")
