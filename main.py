@@ -189,7 +189,7 @@ async def init_db():
         except Exception:
             pass
 
-            # Таблица видео сообщений
+        # Таблица видео сообщений
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS video_messages (
                 id SERIAL PRIMARY KEY,
@@ -225,7 +225,9 @@ async def init_db():
 # Запускаем инициализацию при старте
 @app.on_event("startup")
 async def startup():
-    await init_db()
+    import asyncio
+    # Запускаем init_db в фоне чтобы порт забиндился немедленно
+    asyncio.create_task(init_db())
 
 clients = {}
 
