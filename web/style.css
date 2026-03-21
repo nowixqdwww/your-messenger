@@ -3093,25 +3093,36 @@ body {
     padding: 0 !important;
     box-shadow: none !important;
 }
-.video-msg-circle {
-    width: 200px;
-    height: 200px;
-    border-radius: 50%;
-    /* НЕТ overflow:hidden — иначе SVG кольцо обрезается */
+/* Outer wrapper — содержит кольцо и кружок */
+.video-msg-outer {
     position: relative;
+    width: 216px;
+    height: 216px;
+    flex-shrink: 0;
+}
+/* Кружок с overflow:hidden — только для видео */
+.video-msg-circle {
+    position: absolute;
+    inset: 8px;
+    border-radius: 50%;
+    overflow: hidden;
     background: #111;
-    cursor: pointer;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
 }
 .video-msg-el {
     width: 100%;
     height: 100%;
     object-fit: cover;
     display: block;
-    border-radius: 50%;
-    /* Видео обрезаем через clip-path вместо overflow */
-    clip-path: circle(50%);
-    -webkit-clip-path: circle(50%);
+}
+/* SVG кольцо — поверх, position:absolute на outer */
+.video-msg-ring {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 2;
+    cursor: pointer;
+    pointer-events: auto;
 }
 .video-msg-play {
     position: absolute;
