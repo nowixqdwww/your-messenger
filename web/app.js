@@ -2205,6 +2205,9 @@ function createChatElement(chat) {
         ${unreadBadge}
         <div class="chat-status ${isOnline ? '' : 'offline'}"></div>
     `
+    // Staggered animation
+    const idx = document.querySelectorAll('.chatItem').length
+    div.style.animationDelay = `${Math.min(idx * 30, 200)}ms`
     
     let isLongPress = false
     
