@@ -1503,6 +1503,45 @@ let voiceTouchStartX = 0
 let voiceMode = localStorage.getItem('voiceMode') || 'tap'  // 'tap' | 'hold'
 let voiceTapActive = false  // для режима tap
 
+// ── Настройки камеры ──────────────────────────────────────────
+function loadCameraSettings() {
+    const facing  = localStorage.getItem('cameraFacing')  || 'user'
+    const quality = localStorage.getItem('cameraQuality') || '480'
+    const maxDur  = localStorage.getItem('videoMaxDur')   || '60'
+
+    const f = document.getElementById('cameraFacing')
+    const q = document.getElementById('cameraQuality')
+    const d = document.getElementById('videoMaxDur')
+    if (f) f.value = facing
+    if (q) q.value = quality
+    if (d) d.value = maxDur
+
+    // Применяем к глобальной переменной длительности
+    videoMaxDuration = parseInt(maxDur)
+}
+
+function saveCameraSettings() {
+    const facing  = document.getElementById('cameraFacing')?.value  || 'user'
+    const quality = document.getElementById('cameraQuality')?.value || '480'
+    const maxDur  = document.getElementById('videoMaxDur')?.value   || '60'
+
+    localStorage.setItem('cameraFacing',  facing)
+    localStorage.setItem('cameraQuality', quality)
+    localStorage.setItem('videoMaxDur',   maxDur)
+
+    videoMaxDuration = parseInt(maxDur)
+    showToast('Настройки камеры сохранены')
+}
+
+function getCameraConstraints() {
+    const facing  = localStorage.getItem('cameraFacing')  || 'user'
+    const quality = parseInt(localStorage.getItem('cameraQuality') || '480')
+    return {
+        video: { facingMode: facing, width: { ideal: quality }, height: { ideal: quality } },
+        audio: true
+    }
+}
+
 function saveVoiceMode() {
     const sel = document.getElementById('voiceMode')
     if (!sel) return
@@ -1852,6 +1891,7 @@ document.addEventListener('DOMContentLoaded', () => {
 if (document.readyState !== 'loading') {
     updateVoiceBtnBehavior()
     updateInputButtons()
+    loadCameraSettings()
     document.getElementById('text')?.addEventListener('input', updateInputButtons)
 }
 
@@ -2776,6 +2816,7 @@ function openSettings() {
     const modal = document.getElementById('settingsModal')
     loadPrivacySettings()
     loadVoiceModeSetting()
+    loadCameraSettings()
     modal.classList.add('show')
 }
 
@@ -3072,10 +3113,7 @@ async function openVideoRecorder() {
     videoBlob = null
 
     try {
-        videoStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 480 } },
-            audio: true
-        })
+        videoStream = await navigator.mediaDevices.getUserMedia(getCameraConstraints())
         const preview = document.getElementById('videoPreview')
         preview.srcObject = videoStream
     } catch (e) {
@@ -3584,6 +3622,7 @@ window.deleteChat = deleteChat
 window.muteChat = muteChat
 window.clearChat = clearChat
 window.saveVoiceMode = saveVoiceMode
+window.saveCameraSettings = saveCameraSettings
 window.toggleStickerModal = toggleStickerModal
 window.closeStickerModal = closeStickerModal
 window.switchStickerTab = switchStickerTab
@@ -3599,6 +3638,7 @@ window.forwardMessage = forwardMessage
 window.closeForwardModal = closeForwardModal
 window.clearChat = clearChat
 window.saveVoiceMode = saveVoiceMode
+window.saveCameraSettings = saveCameraSettings
 window.deleteSticker = deleteSticker
 window.showReactionsPanel = showReactionsPanel
 window.addReaction = addReaction
