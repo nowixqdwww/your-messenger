@@ -41,7 +41,7 @@ body {
     position: fixed;
     top: 0; left: 0;
     width: 100%; height: 100%;
-    background: linear-gradient(160deg, #0d7377 0%, #14a085 35%, #0a9396 65%, #05808a 100%);
+    background: linear-gradient(160deg, #1a3a4a 0%, #1e4d5a 40%, #1a4550 100%);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -222,7 +222,7 @@ body {
 /* Sidebar */
 .sidebar {
     width: 350px;
-    background: linear-gradient(170deg, #0d7377 0%, #14a085 50%, #0a9396 100%);
+    background: linear-gradient(180deg, #1c3a47 0%, #1e424f 60%, #1a3d4a 100%);
     display: flex;
     flex-direction: column;
     height: 100vh;
