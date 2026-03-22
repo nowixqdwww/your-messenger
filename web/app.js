@@ -347,27 +347,6 @@ function showLoginForm() {
     document.getElementById('loginScreen').style.display = 'flex'
 }
 
-function normalizePhone(phone) {
-    // Оставляем только цифры
-    let digits = phone.replace(/[^0-9]/g, '')
-    // Российские номера: 8xxx → +7xxx, 7xxx → +7xxx
-    if (digits.length === 11 && digits.startsWith('8')) {
-        digits = '7' + digits.slice(1)
-    }
-    if (digits.length === 11 && digits.startsWith('7')) {
-        return '+' + digits
-    }
-    // 10 цифр — добавляем +7
-    if (digits.length === 10) {
-        return '+7' + digits
-    }
-    // Если уже был + в начале — возвращаем с +
-    if (phone.trim().startsWith('+')) {
-        return '+' + digits
-    }
-    return '+' + digits
-}
-
 async function register() {
     const phone = document.getElementById('registerPhone').value.trim()
     const password = document.getElementById('registerPassword').value
@@ -395,7 +374,16 @@ async function register() {
         return
     }
 
-    const cleanPhone = normalizePhone(phone)
+    let cleanPhone = phone.replace(/[^0-9]/g, '')
+    if (!cleanPhone.startsWith('+')) {
+        if (cleanPhone.length === 11 && cleanPhone.startsWith('7')) {
+            cleanPhone = '+' + cleanPhone
+        } else if (cleanPhone.length === 10) {
+            cleanPhone = '+7' + cleanPhone
+        } else {
+            cleanPhone = '+' + cleanPhone
+        }
+    }
 
     try {
         const res = await fetch('/auth/register', {
@@ -411,28 +399,14 @@ async function register() {
 
         const data = await res.json()
 
-        if (!res.ok || data.error) {
-            showToast(data.error || 'Ошибка регистрации')
+        if (data.error) {
+            showToast(data.error)
             return
         }
 
-        // Автоматически логиним после регистрации
-        showToast('Регистрация успешна! Выполняется вход...')
-        const loginRes = await fetch('/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: cleanPhone, password: password })
-        })
-        const loginData = await loginRes.json()
-        if (!loginRes.ok || loginData.error) {
-            // Fallback — показываем форму входа
-            showLoginForm()
-            document.getElementById('loginPhone').value = cleanPhone
-            showToast('Зарегистрированы! Теперь войдите')
-            return
-        }
-        currentUser = loginData.phone
-        completeLogin()
+        showToast('Регистрация успешна! Теперь войдите')
+        showLoginForm()
+        document.getElementById('loginPhone').value = cleanPhone
 
     } catch (error) {
         console.error('Register error:', error)
@@ -454,7 +428,16 @@ async function login() {
         return
     }
 
-    const cleanPhone = normalizePhone(phone)
+    let cleanPhone = phone.replace(/[^0-9]/g, '')
+    if (!cleanPhone.startsWith('+')) {
+        if (cleanPhone.length === 11 && cleanPhone.startsWith('7')) {
+            cleanPhone = '+' + cleanPhone
+        } else if (cleanPhone.length === 10) {
+            cleanPhone = '+7' + cleanPhone
+        } else {
+            cleanPhone = '+' + cleanPhone
+        }
+    }
 
     try {
         const res = await fetch('/auth/login', {
@@ -1070,7 +1053,7 @@ function renderStickers() {
                 emptyMyStickers.style.display = 'flex'
                 emptyMyStickers.innerHTML = `
                     <span>Нет стикеров — добавьте через вкладку «+»</span>
-                    <button onclick="cleanBrokenStickers()" style="margin-top:8px;padding:6px 12px;background:#667eea;color:white;border:none;border-radius:8px;cursor:pointer;font-size:12px;">
+                    <button onclick="cleanBrokenStickers()" style="margin-top:8px;padding:6px 12px;background:var(--accent);color:white;border:none;border-radius:8px;cursor:pointer;font-size:12px;">
                         🗑 Очистить старые записи
                     </button>`
             }
@@ -1167,9 +1150,8 @@ function addMessage(user, text, messageId = null, isRead = false) {
     if (videoMatch) {
         div.className = 'message me-video ' + (isMe ? 'me' : 'other')
         if (messageId) div.dataset.messageId = messageId
-        const vidDuration = parseInt(videoMatch[1] || '0')
         const vidUrl = videoMatch[2]
-        const player = createVideoPlayer(vidUrl, isMe, vidDuration)
+        const player = createVideoPlayer(vidUrl, isMe)
         div.appendChild(player)
         if (isMe) {
             const ticks = document.createElement('span')
@@ -3115,7 +3097,6 @@ let videoStartTime = null
 let videoTimer = null
 let videoMaxDuration = 60  // секунд
 let videoBlob = null
-let videoActualDuration = 0  // точная длительность в секундах
 
 async function openVideoRecorder() {
     if (!currentChat) { showToast('Сначала откройте чат'); return }
@@ -3148,29 +3129,6 @@ async function openVideoRecorder() {
 
 function closeVideoRecorder() {
     stopVideoStream()
-    // Очищаем предпросмотр
-    const playback = document.getElementById('videoPlayback')
-    if (playback) {
-        if (playback.src && playback.src.startsWith('blob:')) {
-            URL.revokeObjectURL(playback.src)
-        }
-        playback.removeAttribute('src')
-        playback.load()
-        playback.style.display = 'none'
-        playback.ontimeupdate = null
-        playback.onended = null
-    }
-    // Убираем кнопку предпросмотра
-    const previewCirc = document.querySelector('.video-recorder-circle')
-    const oldBtn = previewCirc?.querySelector('.preview-play-btn')
-    if (oldBtn) oldBtn.remove()
-    // Сбрасываем флаг чтобы можно было вешать listeners снова
-    if (previewCirc) previewCirc._seekBound = false
-
-    // Показываем превью камеры
-    const preview = document.getElementById('videoPreview')
-    if (preview) preview.style.display = 'block'
-
     const modal = document.getElementById('videoRecorderModal')
     if (modal) modal.style.display = 'none'
     document.body.style.overflow = ''
@@ -3186,12 +3144,6 @@ function stopVideoStream() {
     if (videoStream) {
         videoStream.getTracks().forEach(t => t.stop())
         videoStream = null
-    }
-    // Обязательно очищаем srcObject — иначе камера не выключается
-    const preview = document.getElementById('videoPreview')
-    if (preview) {
-        preview.srcObject = null
-        preview.load()
     }
 }
 
@@ -3237,7 +3189,6 @@ function toggleVideoRecord() {
 function onVideoRecordStop() {
     const mimeType = videoRecorder?.mimeType || 'video/webm'
     videoBlob = new Blob(videoChunks, { type: mimeType })
-    videoActualDuration = Math.round((Date.now() - videoStartTime) / 1000)
 
     const playback = document.getElementById('videoPlayback')
     const preview  = document.getElementById('videoPreview')
@@ -3325,12 +3276,10 @@ function onVideoRecordStop() {
             if (pendingPreviewSeek !== null) return
             pendingPreviewSeek = pct
             setTimeout(() => {
-                if (playback.duration && isFinite(playback.duration)) {
+                if (playback.duration) {
                     const t = pendingPreviewSeek * playback.duration
-                    try {
-                        if (playback.fastSeek) playback.fastSeek(t)
-                        else playback.currentTime = t
-                    } catch(e) {}
+                    if (playback.fastSeek) playback.fastSeek(t)
+                    else playback.currentTime = t
                 }
                 pendingPreviewSeek = null
             }, 80)
@@ -3344,12 +3293,10 @@ function onVideoRecordStop() {
             if (pendingPreviewSeek !== null) return
             pendingPreviewSeek = pct
             setTimeout(() => {
-                if (playback.duration && isFinite(playback.duration)) {
+                if (playback.duration) {
                     const t = pendingPreviewSeek * playback.duration
-                    try {
-                        if (playback.fastSeek) playback.fastSeek(t)
-                        else playback.currentTime = t
-                    } catch(e) {}
+                    if (playback.fastSeek) playback.fastSeek(t)
+                    else playback.currentTime = t
                 }
                 pendingPreviewSeek = null
             }, 80)
@@ -3384,7 +3331,7 @@ async function sendVideoMessage() {
     // Сохраняем до closeVideoRecorder который обнуляет эти переменные
     const blobToSend = videoBlob
     const chatTo = currentChat
-    const duration = videoActualDuration || Math.round((Date.now() - videoStartTime) / 1000)
+    const duration = Math.round((Date.now() - videoStartTime) / 1000)
     closeVideoRecorder()
 
     // Плейсхолдер в чате
@@ -3392,10 +3339,8 @@ async function sendVideoMessage() {
     const placeholder = document.createElement('div')
     placeholder.className = 'message me video-msg-placeholder'
     placeholder.style.cssText = 'opacity:0;transform:translateY(16px);transition:opacity 0.25s,transform 0.25s'
-    placeholder.innerHTML = `<div class="video-msg-outer" style="position:relative;width:216px;height:216px">
-        <div style="position:absolute;inset:10px;border-radius:50%;overflow:hidden;background:#222;display:flex;align-items:center;justify-content:center">
-            <i class="fas fa-spinner fa-spin" style="font-size:28px;color:rgba(255,255,255,0.6)"></i>
-        </div>
+    placeholder.innerHTML = `<div class="video-msg-circle sending">
+        <i class="fas fa-spinner fa-spin"></i>
     </div>`
     messagesDiv.appendChild(placeholder)
     messagesDiv.scrollTop = messagesDiv.scrollHeight
@@ -3449,7 +3394,7 @@ function resetVideoRing() {
 
 // Создаём видео-плеер в сообщении
     // Внешний контейнер — больше круга, чтобы кольцо было видно
-function createVideoPlayer(url, isMe, knownDuration) {
+function createVideoPlayer(url, isMe) {
     const outer = document.createElement('div')
     outer.className = 'video-msg-outer'
     outer.style.cssText = 'position:relative;width:216px;height:216px;flex-shrink:0'
@@ -3470,7 +3415,7 @@ function createVideoPlayer(url, isMe, knownDuration) {
     const fillC = document.createElementNS(svgNS, 'circle')
     fillC.setAttribute('cx','108'); fillC.setAttribute('cy','108'); fillC.setAttribute('r', String(r))
     fillC.setAttribute('fill','none')
-    fillC.setAttribute('stroke', isMe ? 'white' : '#667eea')
+    fillC.setAttribute('stroke', isMe ? 'white' : 'var(--accent)')
     fillC.setAttribute('stroke-width','4')
     fillC.setAttribute('stroke-linecap','round')
     fillC.setAttribute('stroke-dasharray', String(circ))
@@ -3494,23 +3439,22 @@ function createVideoPlayer(url, isMe, knownDuration) {
 
     // Таймер
     const timeEl = document.createElement('span')
-    timeEl.style.cssText = 'position:absolute;bottom:18px;left:50%;transform:translateX(-50%);font-size:11px;font-weight:600;color:white;text-shadow:0 1px 3px rgba(0,0,0,0.8);white-space:nowrap;z-index:4;pointer-events:none'
+    timeEl.style.cssText = 'position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);font-size:11px;color:rgba(255,255,255,0.7);white-space:nowrap;z-index:3'
+    timeEl.textContent = '0:00'
+
     let playing = false
 
     function fmt(s) { s = Math.max(0, Math.floor(s)); return `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}` }
-    timeEl.textContent = knownDuration ? fmt(knownDuration) : '0:00'
 
     function updateRing() {
-        const dur = (isFinite(video.duration) && video.duration > 0) ? video.duration : (knownDuration || 0)
-        if (!dur) return
-        const pct = video.currentTime / dur
+        if (!video.duration || !isFinite(video.duration)) return
+        const pct = video.currentTime / video.duration
         fillC.setAttribute('stroke-dashoffset', String(circ * (1 - pct)))
-        timeEl.textContent = fmt(dur - video.currentTime)
+        timeEl.textContent = fmt(video.duration - video.currentTime)
     }
 
     video.addEventListener('loadedmetadata', () => {
-        if (isFinite(video.duration) && video.duration > 0) timeEl.textContent = fmt(video.duration)
-        else if (knownDuration) timeEl.textContent = fmt(knownDuration)
+        if (isFinite(video.duration)) timeEl.textContent = fmt(video.duration)
     })
     video.addEventListener('timeupdate', updateRing)
     video.addEventListener('ended', () => {
@@ -3518,8 +3462,7 @@ function createVideoPlayer(url, isMe, knownDuration) {
         playBtn.innerHTML = '<i class="fas fa-play"></i>'
         video.currentTime = 0
         fillC.setAttribute('stroke-dashoffset', String(circ))
-        const endDur = (isFinite(video.duration) && video.duration > 0) ? video.duration : (knownDuration || 0)
-        if (endDur) timeEl.textContent = fmt(endDur)
+        if (isFinite(video.duration)) timeEl.textContent = fmt(video.duration)
         showPlayBtn()
     })
     video.addEventListener('error', () => {
@@ -3596,12 +3539,10 @@ function createVideoPlayer(url, isMe, knownDuration) {
         if (pendingSeek !== null) return
         pendingSeek = pct
         setTimeout(() => {
-            if (video.duration && isFinite(video.duration)) {
+            if (video.duration) {
                 const t = pendingSeek * video.duration
-                try {
-                    if (video.fastSeek) video.fastSeek(t)
-                    else video.currentTime = t
-                } catch(e) {}
+                if (video.fastSeek) video.fastSeek(t)
+                else video.currentTime = t
             }
             pendingSeek = null
         }, 80)
