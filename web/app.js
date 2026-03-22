@@ -673,6 +673,12 @@ async function showUserProfile(phone, isMyProfile = false) {
             '<span style="color: #f87171;">● Оффлайн</span>'
         
         modalActions.innerHTML = ''
+
+        // Три точки — только для чужого профиля
+        const profileMenuBtn = document.getElementById('profileMenuBtn')
+        if (profileMenuBtn) profileMenuBtn.style.display = isMyProfile ? 'none' : 'flex'
+        // Сохраняем телефон для действий из меню
+        if (!isMyProfile) document.getElementById('profileModal')._profilePhone = phone
         
         if (isMyProfile) {
             profileView.style.display = 'block'
@@ -3589,6 +3595,35 @@ window.sendVideoMessage   = sendVideoMessage
 // Глобальные функции для HTML
 window.toggleSidebar = toggleSidebar
 window.closeChat = closeChat
+function toggleProfileMenu(e) {
+    e.stopPropagation()
+    const menu = document.getElementById('profileDropdownMenu')
+    if (menu.style.display === 'block') {
+        menu.style.display = 'none'
+        return
+    }
+    menu.style.display = 'block'
+    const close = () => { menu.style.display = 'none'; document.removeEventListener('click', close) }
+    setTimeout(() => document.addEventListener('click', close), 0)
+}
+
+function openChatThemeFromProfile() {
+    document.getElementById('profileDropdownMenu').style.display = 'none'
+    closeModal()
+    // Небольшая задержка чтобы модалка закрылась
+    setTimeout(() => openChatThemeModal(), 200)
+}
+
+function blockFromProfile() {
+    document.getElementById('profileDropdownMenu').style.display = 'none'
+    const phone = document.getElementById('profileModal')._profilePhone
+    if (phone) { closeModal(); blockUser(phone) }
+}
+
+window.toggleProfileMenu = toggleProfileMenu
+window.openChatThemeFromProfile = openChatThemeFromProfile
+window.blockFromProfile = blockFromProfile
+
 window.openChatProfile = openChatProfile
 window.openMyProfile = openMyProfile
 window.send = send
