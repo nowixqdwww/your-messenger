@@ -41,12 +41,12 @@ body {
     position: fixed;
     top: 0; left: 0;
     width: 100%; height: 100%;
-    background: #c6d1d1;
+    background: #1e2a35;
     background-image:
-        radial-gradient(ellipse at 20% 50%, #92b3c9 0%, transparent 60%),
-        radial-gradient(ellipse at 75% 20%, #f96656 0%, transparent 55%),
-        radial-gradient(ellipse at 80% 80%, #f66e56 0%, transparent 50%),
-        radial-gradient(ellipse at 45% 70%, #c6d1d1 0%, transparent 45%);
+        radial-gradient(ellipse at 15% 60%, #1a3a5c 0%, transparent 55%),
+        radial-gradient(ellipse at 80% 20%, #5c2a2a 0%, transparent 50%),
+        radial-gradient(ellipse at 70% 75%, #7a2e2e 0%, transparent 45%),
+        radial-gradient(ellipse at 35% 30%, #1e3d50 0%, transparent 50%);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -85,7 +85,7 @@ body {
 }
 
 .login-container {
-    background: rgba(255, 255, 255, 0.45);
+    background: rgba(255,255,255,0.07);
     backdrop-filter: blur(40px) saturate(180%);
     -webkit-backdrop-filter: blur(40px) saturate(180%);
     border: 1px solid rgba(255,255,255,0.3);
@@ -112,41 +112,41 @@ body {
 }
 
 .login-container h1 {
-    color: #1c1c1e;
+    color: rgba(255,255,255,0.95);
     margin-bottom: 10px;
     font-size: 2.5rem;
 }
 
 .login-container p {
-    color: rgba(0,0,0,0.5);
+    color: rgba(255,255,255,0.6);
     margin-bottom: 20px;
 }
 
 .login-input {
     width: 100%;
     padding: 14px 16px;
-    background: rgba(255,255,255,0.6);
-    border: 1px solid rgba(255,255,255,0.7);
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.18);
     border-radius: 14px;
     font-size: 16px;
     margin-bottom: 12px;
-    color: #1c1c1e;
+    color: white;
     transition: border-color 0.2s, background 0.2s;
     backdrop-filter: blur(10px);
 }
 
-.login-input::placeholder { color: rgba(0,0,0,0.35); }
+.login-input::placeholder { color: rgba(255,255,255,0.45); }
 
 .login-input:focus {
     outline: none;
     border-color: rgba(255,255,255,0.7);
-    background: rgba(255,255,255,0.8);
+    background: rgba(255,255,255,0.12);
 }
 
 .login-btn {
     width: 100%;
     padding: 15px;
-    background: rgba(249,102,86,0.9);
+    background: rgba(200,80,70,0.85);
     color: white;
     border: none;
     border-radius: 14px;
@@ -227,12 +227,12 @@ body {
 /* Sidebar */
 .sidebar {
     width: 350px;
-    background: #c6d1d1;
+    background: #1e2a35;
     background-image:
-        radial-gradient(ellipse at 20% 50%, #92b3c9 0%, transparent 60%),
-        radial-gradient(ellipse at 75% 20%, #f96656 0%, transparent 55%),
-        radial-gradient(ellipse at 80% 80%, #f66e56 0%, transparent 50%),
-        radial-gradient(ellipse at 45% 70%, #c6d1d1 0%, transparent 45%);
+        radial-gradient(ellipse at 15% 60%, #1a3a5c 0%, transparent 55%),
+        radial-gradient(ellipse at 80% 20%, #5c2a2a 0%, transparent 50%),
+        radial-gradient(ellipse at 70% 75%, #7a2e2e 0%, transparent 45%),
+        radial-gradient(ellipse at 35% 30%, #1e3d50 0%, transparent 50%);
     display: flex;
     flex-direction: column;
     height: 100vh;
@@ -246,7 +246,7 @@ body {
     padding: 16px 20px 12px;
     background: rgba(255,255,255,0.2);
     backdrop-filter: blur(20px);
-    color: #2c2c2e;
+    color: rgba(255,255,255,0.9);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -673,7 +673,7 @@ body {
 }
 
 .chatItem.active {
-    background: rgba(255,255,255,0.18);
+    background: rgba(255,255,255,0.12);
 }
 
 /* Активный — левая полоска */
@@ -682,7 +682,7 @@ body {
     position: absolute;
     left: 0; top: 8px; bottom: 8px;
     width: 3px;
-    background: #f96656;
+    background: rgba(200,100,90,0.8);
     border-radius: 0 3px 3px 0;
 }
 
@@ -693,7 +693,7 @@ body {
 
 .chat-name {
     font-weight: 600;
-    color: #1c1c1e;
+    color: rgba(255,255,255,0.92);
     margin-bottom: 2px;
     white-space: nowrap;
     overflow: hidden;
@@ -704,7 +704,7 @@ body {
 
 .chat-last-message {
     font-size: 13px;
-    color: rgba(0,0,0,0.45);
+    color: rgba(255,255,255,0.5);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -726,7 +726,7 @@ body {
 
 /* Unread badge */
 .unread-badge {
-    background: #f96656;
+    background: rgba(200,80,70,0.85);
     color: white;
     font-size: 12px;
     font-weight: bold;
@@ -3451,7 +3451,7 @@ button:active:not(:disabled) {
 .sidebar-header h2 {
     font-size: 22px;
     font-weight: 700;
-    color: #1c1c1e;
+    color: rgba(255,255,255,0.92);
     letter-spacing: -0.5px;
 }
 
@@ -3461,5 +3461,5 @@ button:active:not(:disabled) {
     border: 2px solid rgba(255,255,255,0.6);
 }
 .chat-avatar span {
-    color: #2c2c2e !important;
+    color: rgba(255,255,255,0.9) !important;
 }
