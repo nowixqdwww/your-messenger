@@ -3129,6 +3129,29 @@ async function openVideoRecorder() {
 
 function closeVideoRecorder() {
     stopVideoStream()
+    // Очищаем предпросмотр
+    const playback = document.getElementById('videoPlayback')
+    if (playback) {
+        if (playback.src && playback.src.startsWith('blob:')) {
+            URL.revokeObjectURL(playback.src)
+        }
+        playback.removeAttribute('src')
+        playback.load()
+        playback.style.display = 'none'
+        playback.ontimeupdate = null
+        playback.onended = null
+    }
+    // Убираем кнопку предпросмотра
+    const previewCirc = document.querySelector('.video-recorder-circle')
+    const oldBtn = previewCirc?.querySelector('.preview-play-btn')
+    if (oldBtn) oldBtn.remove()
+    // Сбрасываем флаг чтобы можно было вешать listeners снова
+    if (previewCirc) previewCirc._seekBound = false
+
+    // Показываем превью камеры
+    const preview = document.getElementById('videoPreview')
+    if (preview) preview.style.display = 'block'
+
     const modal = document.getElementById('videoRecorderModal')
     if (modal) modal.style.display = 'none'
     document.body.style.overflow = ''
@@ -3276,10 +3299,12 @@ function onVideoRecordStop() {
             if (pendingPreviewSeek !== null) return
             pendingPreviewSeek = pct
             setTimeout(() => {
-                if (playback.duration) {
+                if (playback.duration && isFinite(playback.duration)) {
                     const t = pendingPreviewSeek * playback.duration
-                    if (playback.fastSeek) playback.fastSeek(t)
-                    else playback.currentTime = t
+                    try {
+                        if (playback.fastSeek) playback.fastSeek(t)
+                        else playback.currentTime = t
+                    } catch(e) {}
                 }
                 pendingPreviewSeek = null
             }, 80)
@@ -3293,10 +3318,12 @@ function onVideoRecordStop() {
             if (pendingPreviewSeek !== null) return
             pendingPreviewSeek = pct
             setTimeout(() => {
-                if (playback.duration) {
+                if (playback.duration && isFinite(playback.duration)) {
                     const t = pendingPreviewSeek * playback.duration
-                    if (playback.fastSeek) playback.fastSeek(t)
-                    else playback.currentTime = t
+                    try {
+                        if (playback.fastSeek) playback.fastSeek(t)
+                        else playback.currentTime = t
+                    } catch(e) {}
                 }
                 pendingPreviewSeek = null
             }, 80)
@@ -3339,8 +3366,10 @@ async function sendVideoMessage() {
     const placeholder = document.createElement('div')
     placeholder.className = 'message me video-msg-placeholder'
     placeholder.style.cssText = 'opacity:0;transform:translateY(16px);transition:opacity 0.25s,transform 0.25s'
-    placeholder.innerHTML = `<div class="video-msg-circle sending">
-        <i class="fas fa-spinner fa-spin"></i>
+    placeholder.innerHTML = `<div class="video-msg-outer" style="position:relative;width:216px;height:216px">
+        <div style="position:absolute;inset:10px;border-radius:50%;overflow:hidden;background:#222;display:flex;align-items:center;justify-content:center">
+            <i class="fas fa-spinner fa-spin" style="font-size:28px;color:rgba(255,255,255,0.6)"></i>
+        </div>
     </div>`
     messagesDiv.appendChild(placeholder)
     messagesDiv.scrollTop = messagesDiv.scrollHeight
@@ -3539,10 +3568,12 @@ function createVideoPlayer(url, isMe) {
         if (pendingSeek !== null) return
         pendingSeek = pct
         setTimeout(() => {
-            if (video.duration) {
+            if (video.duration && isFinite(video.duration)) {
                 const t = pendingSeek * video.duration
-                if (video.fastSeek) video.fastSeek(t)
-                else video.currentTime = t
+                try {
+                    if (video.fastSeek) video.fastSeek(t)
+                    else video.currentTime = t
+                } catch(e) {}
             }
             pendingSeek = null
         }, 80)
