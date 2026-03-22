@@ -3513,12 +3513,13 @@ function createVideoPlayer(url, isMe) {
         if (!scrubbing) return
         scrubbing = false
         if (!dragMoved) {
-            // Это был клик — показываем кнопку
-            showPlayBtn()
+            // Клик на кружок — пауза если играло, показываем кнопку
             if (playing) {
-                clearTimeout(outer._hideTimer)
-                outer._hideTimer = setTimeout(hidePlayBtn, 2000)
+                video.pause()
+                playing = false
+                playBtn.innerHTML = '<i class="fas fa-play"></i>'
             }
+            showPlayBtn()
         }
     }
     document.addEventListener('mousemove', onMove)
