@@ -4089,8 +4089,12 @@ function openChatThemeModal() {
 
 function closeChatThemeModal() {
     document.getElementById('chatThemeModal').style.display = 'none'
+    // Откатываем live preview — восстанавливаем сохранённую тему чата
+    if (selectedChatPhone === currentChat) {
+        loadChatTheme(currentChat)
+    }
     pendingChatTheme = {}
-    // НЕ сбрасываем selectedChatPhone здесь — он нужен для loadChatTheme после закрытия
+    selectedChatPhone = null
 }
 
 function renderChatBubbleSwatches() {
@@ -4154,38 +4158,45 @@ function handleChatWallpaperUpload(input) {
 
 function updateChatThemePreview() {
     const preview = document.getElementById('chatThemePreview')
-    if (!preview) return
-
-    // Обои предпросмотра
-    if (pendingChatTheme.wallpaper) {
-        const wp = pendingChatTheme.wallpaper
-        if (wp.type === 'color') {
-            preview.style.background = wp.value
-        } else if (wp.type === 'gradient') {
-            preview.style.background = wp.value
-        } else if (wp.type === 'image') {
-            preview.style.backgroundImage = `url(${wp.value})`
-            preview.style.backgroundSize = 'cover'
-        } else if (wp.type === 'pattern') {
-            const patterns = {
-                dots:  { bg:'#f8f8f8', img:'radial-gradient(circle,#00000015 1px,transparent 1px)', size:'20px 20px' },
-                grid:  { bg:'#f8f8f8', img:'linear-gradient(#0000000a 1px,transparent 1px),linear-gradient(90deg,#0000000a 1px,transparent 1px)', size:'24px 24px' },
-                waves: { bg:'#e8f4f8', img:'repeating-linear-gradient(45deg,#00000008 0,#00000008 1px,transparent 0,transparent 50%)', size:'10px 10px' },
+    if (preview) {
+        // Обои в превью-блоке модалки
+        if (pendingChatTheme.wallpaper) {
+            const wp = pendingChatTheme.wallpaper
+            if (wp.type === 'color') {
+                preview.style.background = wp.value
+                preview.style.backgroundImage = ''
+            } else if (wp.type === 'gradient') {
+                preview.style.background = wp.value
+                preview.style.backgroundImage = ''
+            } else if (wp.type === 'image') {
+                preview.style.background = ''
+                preview.style.backgroundImage = `url(${wp.value})`
+                preview.style.backgroundSize = 'cover'
+                preview.style.backgroundPosition = 'center'
+            } else if (wp.type === 'pattern') {
+                const patterns = {
+                    dots:  { bg:'#f8f8f8', img:'radial-gradient(circle,#00000015 1px,transparent 1px)', size:'20px 20px' },
+                    grid:  { bg:'#f8f8f8', img:'linear-gradient(#0000000a 1px,transparent 1px),linear-gradient(90deg,#0000000a 1px,transparent 1px)', size:'24px 24px' },
+                    waves: { bg:'#e8f4f8', img:'repeating-linear-gradient(45deg,#00000008 0,#00000008 1px,transparent 0,transparent 50%)', size:'10px 10px' },
+                }
+                const p = patterns[wp.value] || patterns.dots
+                preview.style.background = p.bg
+                preview.style.backgroundImage = p.img
+                preview.style.backgroundSize = p.size
             }
-            const p = patterns[wp.value] || patterns.dots
-            preview.style.background = p.bg
-            preview.style.backgroundImage = p.img
-            preview.style.backgroundSize = p.size
+        } else {
+            preview.style.cssText = ''
         }
-    } else {
-        preview.style.cssText = ''
+        // Цвет пузырьков в превью
+        preview.querySelectorAll('.theme-preview-msg.me').forEach(m => {
+            m.style.background = pendingChatTheme.bubble || 'var(--accent)'
+        })
     }
 
-    // Цвет пузырьков
-    const myMsgs = preview.querySelectorAll('.theme-preview-msg.me')
-    myMsgs.forEach(m => {
-        m.style.background = pendingChatTheme.bubble || 'var(--accent)'
-    })
+    // Live preview — применяем к реальному чату если это текущий чат
+    if (selectedChatPhone && selectedChatPhone === currentChat) {
+        applyChatTheme(pendingChatTheme)
+    }
 }
 
 async function saveChatTheme() {
